@@ -51,6 +51,14 @@
                     </p>
                 </div>
 
+                @if ($errors->all())
+                    <div class="mb-4 p-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300">
+                        @foreach ($errors->all() as $error)
+                            {{ $error }}<br />
+                        @endforeach
+                    </div>
+                @endif
+
                 <div class="flex items-center justify-between gap-3">
                     <div class="flex-1">
                         @include('partial.data-table.toolbar', ['placeholder' => 'Search versions...', 'showPageSize' => false])

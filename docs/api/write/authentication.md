@@ -64,7 +64,7 @@ Tokens inherit the permissions of the user who created them. The following permi
 | `modpacks_create` | Create new modpacks |
 | `modpacks_manage` | Update modpacks, manage builds and build mods |
 | `modpacks_delete` | Delete modpacks |
-| `mods_create` | Create new mods |
+| `mods_create` | Create & import new mods |
 | `mods_manage` | Update mods, create/delete mod versions |
 | `mods_delete` | Delete mods |
 | `solder_clients` | Manage clients (create, update, delete) |

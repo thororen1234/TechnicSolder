@@ -136,6 +136,7 @@
                 <div x-show="sections.mods" x-collapse>
                     <a href="{{ url('mod/list') }}" class="block pl-13 pr-5 py-1.5 text-sm text-slate-300 hover:text-white transition-colors">Mod List</a>
                     <a href="{{ url('mod/create') }}" class="block pl-13 pr-5 py-1.5 text-sm text-slate-300 hover:text-white transition-colors">Add a Mod</a>
+                    <a href="{{ url('mod/import') }}" class="block pl-13 pr-5 py-1.5 text-sm text-slate-300 hover:text-white transition-colors">Import a Mod</a>
                 </div>
             </div>
 

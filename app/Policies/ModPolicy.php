@@ -17,6 +17,11 @@ class ModPolicy
         return $user->permission->mods_create;
     }
 
+    public function import(User $user): bool
+    {
+        return $user->permission->mods_create;
+    }
+
     public function update(User $user, Mod $mod): bool
     {
         return $user->permission->mods_manage;
