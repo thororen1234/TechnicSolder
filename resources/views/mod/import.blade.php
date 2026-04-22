@@ -55,7 +55,7 @@
                     name="loader"
                     class="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm px-3 py-2 text-gray-900 dark:text-gray-100"
                 >
-                    @foreach (['' => 'Any Loader', 'forge' => 'Forge', 'neoforge' => 'NeoForge', 'fabric' => 'Fabric', 'quilt' => 'Quilt'] as $value => $label)
+                    @foreach (['' => 'Any Loader', 'fabric' => 'Fabric', 'quilt' => 'Quilt', 'forge' => 'Forge', 'neoforge' => 'NeoForge'] as $value => $label)
                         <option value="{{ $value }}" {{ $loader === $value ? 'selected' : '' }}>{{ $label }}</option>
                     @endforeach
                 </select>
