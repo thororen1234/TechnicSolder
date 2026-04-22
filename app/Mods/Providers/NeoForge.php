@@ -27,9 +27,18 @@ class NeoForge extends ModProvider
         return true;
     }
 
-    private static function getVersions(): array
+    private static function forgeApiUrl(): string
     {
-        $xml = static::request("/maven-metadata.xml", true);
+        return "https://maven.neoforged.net/releases/net/neoforged/forge";
+    }
+
+    private static function fetchMavenVersions(string $baseUrl): array
+    {
+        $curl_h = curl_init($baseUrl . '/maven-metadata.xml');
+        curl_setopt($curl_h, CURLOPT_HTTPHEADER, static::apiHeaders());
+        curl_setopt($curl_h, CURLOPT_RETURNTRANSFER, true);
+        $xml = curl_exec($curl_h);
+        curl_close($curl_h);
 
         if (!$xml) {
             return [];
@@ -43,7 +52,6 @@ class NeoForge extends ModProvider
         }
 
         $versions = [];
-
         foreach ($data->versioning->versions->version as $v) {
             $versions[] = (string) $v;
         }
@@ -51,10 +59,28 @@ class NeoForge extends ModProvider
         return $versions;
     }
 
+    private static function getVersions(): array
+    {
+        $forgeVersions = array_values(array_filter(
+            static::fetchMavenVersions(static::forgeApiUrl()),
+            fn ($v) => (bool) preg_match('/^1\.\d+\.\d+-\d/', $v)
+        ));
+
+        return array_merge($forgeVersions, static::fetchMavenVersions(static::apiUrl()));
+    }
+
     private static function extractMcVersion(string $version): array
     {
-        if (preg_match('/^(\d+\.\d+(?:\.\d+)?)-(.+)$/', $version, $m)) {
+        if (preg_match('/^(1\.\d+(?:\.\d+)?)-(.+)$/', $version, $m)) {
             return [$m[1], $version];
+        }
+
+        if (preg_match('/^(\d+\.\d+\.\d+)\./', $version, $m)) {
+            return [$m[1], $version];
+        }
+
+        if (preg_match('/^(\d+)\.(\d+)\./', $version, $m)) {
+            return ["1.{$m[1]}.{$m[2]}", $version];
         }
 
         return ["unknown", $version];
@@ -86,10 +112,21 @@ class NeoForge extends ModProvider
         return $grouped;
     }
 
-    public static function search(string $query, int $page = 1): object
+    public static function search(string $query, int $page = 1, string $gameVersion = '', string $loader = ''): object
     {
         $all = static::getVersions();
         $grouped = static::groupVersionsByMc($all, $query);
+
+        if (!empty($gameVersion)) {
+            $grouped = array_filter(
+                $grouped,
+                fn ($mc) => stripos($mc, $gameVersion) !== false,
+                ARRAY_FILTER_USE_KEY
+            );
+        }
+
+        uksort($grouped, fn ($a, $b) => version_compare($b, $a));
+        $grouped = array_map('array_reverse', $grouped);
 
         $mods = [];
 
@@ -121,7 +158,7 @@ class NeoForge extends ModProvider
             return null;
         }
 
-        return static::generateModData($modId, $grouped[$modId]);
+        return static::generateModData($modId, array_reverse($grouped[$modId]));
     }
 
     private static function generateModData($mcVersion, $versions): ImportedModData
@@ -146,12 +183,19 @@ class NeoForge extends ModProvider
         $modData->versions = [];
 
         foreach ($versions as $version) {
-            $modData->versions["neoforge-{$version}"] = (object) [
-                "url" => static::apiUrl()
-                    . "/{$version}/neoforge-{$version}-installer.jar",
-                "filename" => "neoforge-{$version}-installer.jar",
-                "gameVersions" => [$mcVersion],
-            ];
+            if (str_starts_with($version, '1.')) {
+                $modData->versions["forge-{$version}"] = (object) [
+                    "url"          => static::forgeApiUrl() . "/{$version}/forge-{$version}-installer.jar",
+                    "filename"     => "modpack.jar",
+                    "gameVersions" => [$mcVersion],
+                ];
+            } else {
+                $modData->versions["neoforge-{$version}"] = (object) [
+                    "url"          => static::apiUrl() . "/{$version}/neoforge-{$version}-installer.jar",
+                    "filename"     => "modpack.jar",
+                    "gameVersions" => [$mcVersion],
+                ];
+            }
         }
 
         return $modData;

@@ -17,17 +17,30 @@ class Modrinth extends ModProvider
         return "https://api.modrinth.com/v2";
     }
 
-    public static function search(string $query, int $page = 1): object
+    public static function search(string $query, int $page = 1, string $gameVersion = '', string $loader = ''): object
     {
         $pageSize = 20;
         $offset = max(0, ($page - 1) * $pageSize);
 
-        $data = static::request("/search?" . http_build_query([
+        $params = [
             "limit" => $pageSize,
             "offset" => $offset,
             "query" => $query,
             "index" => "relevance",
-        ]));
+        ];
+
+        $facets = [];
+        if (!empty($gameVersion)) {
+            $facets[] = ["versions:$gameVersion"];
+        }
+        if (!empty($loader)) {
+            $facets[] = ["categories:$loader"];
+        }
+        if (!empty($facets)) {
+            $params["facets"] = json_encode($facets);
+        }
+
+        $data = static::request("/search?" . http_build_query($params));
 
         $mods = [];
 
@@ -75,6 +88,7 @@ class Modrinth extends ModProvider
                     "url"          => $primaryFile->url,
                     "filename"     => $primaryFile->filename ?? "mod.jar",
                     "gameVersions" => $version->game_versions ?? [],
+                    "versionType"  => $version->version_type ?? "release",
                 ];
             }
         }

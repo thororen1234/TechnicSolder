@@ -12,7 +12,7 @@ abstract class ModProvider
 {
     abstract public static function name() : string;
     abstract protected static function apiUrl() : string;
-    abstract public static function search(string $query, int $page = 1) : object;
+    abstract public static function search(string $query, int $page = 1, string $gameVersion = '', string $loader = '') : object;
     abstract public static function mod(string $modId) : ?ImportedModData;
     
     
@@ -89,7 +89,60 @@ abstract class ModProvider
                 $modVersion = json_decode($riftData)->version;
             }
 
+            if (empty($modVersion)) {
+                $tomlData = $zip->getFromName('META-INF/mods.toml');
+                if ($tomlData !== false) {
+                    $parsedVersion = '';
+
+                    if (preg_match('/\[\[mods\]\](.*?)(?=\[\[|\z)/s', $tomlData, $modsMatch) &&
+                        preg_match('/\bversion\s*=\s*"([^"]+)"/', $modsMatch[1], $verMatch)) {
+                        $parsedVersion = $verMatch[1];
+                    }
+
+                    if ($parsedVersion === '${file.jarVersion}') {
+                        $manifest = $zip->getFromName('META-INF/MANIFEST.MF');
+                        if ($manifest !== false &&
+                            preg_match('/^Implementation-Version:\s*(.+)$/m', $manifest, $manifestMatch)) {
+                            $parsedVersion = trim($manifestMatch[1]);
+                        } else {
+                            $parsedVersion = '';
+                        }
+                    }
+
+                    if (!empty($parsedVersion)) {
+                        $mcVer = '';
+
+                        if (preg_match_all('/\[\[dependencies\.[^\]]+\]\](.*?)(?=\[\[|\z)/s', $tomlData, $depMatches)) {
+                            foreach ($depMatches[1] as $depBlock) {
+                                if (preg_match('/\bmodId\s*=\s*"minecraft"/i', $depBlock) &&
+                                    preg_match('/\bversionRange\s*=\s*"\[([0-9][0-9.]+)/i', $depBlock, $mcMatch)) {
+                                    $mcVer = $mcMatch[1];
+                                    break;
+                                }
+                            }
+                        }
+
+                        $modVersion = empty($mcVer) ? $parsedVersion : "$mcVer-$parsedVersion";
+                    }
+                }
+            }
+
             $zip->close();
+
+            if (!empty($modVersion)) {
+                $versionObj = $modData->versions[$version] ?? null;
+                $apiMcVersions = array_values(array_filter(
+                    (array) ($versionObj->gameVersions ?? []),
+                    fn ($v) => (bool) preg_match('/^\d+\.\d+/', $v) && ! str_starts_with($v, 'Java')
+                ));
+                if (! empty($apiMcVersions)) {
+                    $apiMcVer = $apiMcVersions[0];
+                    if (preg_match('/^(\d+\.\d+(?:\.\d+)?)(.*)$/', $modVersion, $m) &&
+                        $m[1] !== $apiMcVer && str_starts_with($apiMcVer, $m[1] . '.')) {
+                        $modVersion = $apiMcVer . $m[2];
+                    }
+                }
+            }
 
             if (empty($modVersion)) {
                 unlink($tmpFileName);
@@ -123,10 +176,53 @@ abstract class ModProvider
 
         $ver = new Modversion();
         $ver->mod_id = $modId;
-        $ver->version = $version;
+        $ver->version = $modVersion;
         $ver->filesize = filesize($finalPath);
         $ver->md5 = md5_file($finalPath);
         $ver->save();
+    }
+
+    /**
+     * @param string $releaseType  "release"|"beta"|"alpha"|"any"|"" (empty = prefer release > beta > alpha)
+     */
+    public static function latestStableVersionForGame(array $versions, string $gameVersion, string $releaseType = ''): ?string
+    {
+        $candidates = [];
+
+        foreach ($versions as $key => $version) {
+            $gameVersions = (array) ($version->gameVersions ?? []);
+
+            if (!empty($gameVersion) && !in_array($gameVersion, $gameVersions)) {
+                continue;
+            }
+
+            $type = $version->versionType ?? 'release';
+
+            if ($releaseType !== '' && $releaseType !== 'any' && $type !== $releaseType) {
+                continue;
+            }
+
+            $candidates[$key] = $type;
+        }
+
+        if (empty($candidates)) {
+            return null;
+        }
+
+        if ($releaseType !== '') {
+            return array_key_first($candidates);
+        }
+
+        // Default: prefer release > beta > alpha
+        foreach (['release', 'beta', 'alpha'] as $preferred) {
+            foreach ($candidates as $key => $type) {
+                if ($type === $preferred) {
+                    return $key;
+                }
+            }
+        }
+
+        return array_key_first($candidates);
     }
 
     public static function install(string $modId, array $versions)

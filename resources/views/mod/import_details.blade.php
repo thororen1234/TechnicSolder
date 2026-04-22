@@ -27,7 +27,7 @@
             {{-- MOD INFO --}}
             <div class="flex gap-4 mb-6">
                 @if (!empty($mod->thumbnailUrl))
-                    <div class="flex-shrink-0">
+                    <div class="shrink-0">
                         <img
                             src="{{ $mod->thumbnailUrl }}"
                             alt="{{ $mod->thumbnailDesc }}"

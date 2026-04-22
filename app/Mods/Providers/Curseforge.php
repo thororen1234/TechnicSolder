@@ -33,7 +33,14 @@ class CurseForge extends ModProvider
         return !empty($apiKey);
     }
 
-    public static function search(string $query, int $page = 1): object
+    private static array $loaderTypeMap = [
+        'forge'    => 1,
+        'fabric'   => 4,
+        'quilt'    => 5,
+        'neoforge' => 6,
+    ];
+
+    public static function search(string $query, int $page = 1, string $gameVersion = '', string $loader = ''): object
     {
         $empty = (object) [
             "mods" => [],
@@ -52,16 +59,25 @@ class CurseForge extends ModProvider
         $pageSize = 20;
         $index = ($page - 1) * $pageSize;
 
-        $data = static::request(
-            "/mods/search?" . http_build_query([
-                "gameId"       => 432,
-                "classId"      => 6,
-                "searchFilter" => $query,
-                "pageSize"     => $pageSize,
-                "index"        => $index,
-                "sortField"    => 2,
-            ])
-        );
+        $params = [
+            "gameId"       => 432,
+            "classId"      => 6,
+            "searchFilter" => $query,
+            "pageSize"     => $pageSize,
+            "index"        => $index,
+            "sortField"    => 6,
+            "sortOrder"    => "desc",
+        ];
+
+        if (!empty($gameVersion)) {
+            $params["gameVersion"] = $gameVersion;
+        }
+
+        if (!empty($loader) && isset(static::$loaderTypeMap[$loader])) {
+            $params["modLoaderType"] = static::$loaderTypeMap[$loader];
+        }
+
+        $data = static::request("/mods/search?" . http_build_query($params));
 
         if (!$data || isset($data->error) || isset($data->errorCode)) {
             $message = $data->errorMessage ?? $data->error ?? "CurseForge API request failed. Check your API key.";
@@ -175,6 +191,11 @@ class CurseForge extends ModProvider
                 "url"          => $file->downloadUrl,
                 "filename"     => $file->fileName ?? "mod.jar",
                 "gameVersions" => $file->gameVersions ?? [],
+                "versionType"  => match ($file->releaseType ?? 1) {
+                    2       => "beta",
+                    3       => "alpha",
+                    default => "release",
+                },
             ];
         }
 

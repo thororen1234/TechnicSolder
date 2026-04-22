@@ -71,7 +71,7 @@ class Forge extends ModProvider
         return $versionsMap;
     }
 
-    public static function search(string $query, int $page = 1): object
+    public static function search(string $query, int $page = 1, string $gameVersion = '', string $loader = ''): object
     {
         $versionsMap = static::getVersionsMap();
 
@@ -82,7 +82,11 @@ class Forge extends ModProvider
                 continue;
             }
 
-            $mods[] = static::generateModData($mcVersion, $versions);
+            if (!empty($gameVersion) && stripos($mcVersion, $gameVersion) === false) {
+                continue;
+            }
+
+            $mods[] = static::generateModData($mcVersion, array_reverse($versions));
         }
 
         return (object) [
@@ -103,7 +107,7 @@ class Forge extends ModProvider
             return null;
         }
 
-        return static::generateModData($modId, $versionsMap[$modId]);
+        return static::generateModData($modId, array_reverse($versionsMap[$modId]));
     }
 
     private static function generateModData($mc, $versions): ImportedModData
@@ -128,13 +132,12 @@ class Forge extends ModProvider
         $modData->versions = [];
 
         foreach ($versions as $version) {
-            $modData->versions[$version] = (object) [
-                "url" =>
-                    "https://maven.minecraftforge.net/net/minecraftforge/forge/"
+            $key = "{$mc}-forge-{$version}";
+            $modData->versions[$key] = (object) [
+                "url"          => "https://maven.minecraftforge.net/net/minecraftforge/forge/"
                     . "{$mc}-{$version}/forge-{$mc}-{$version}-installer.jar",
-
-                    "filename" => "forge-{$mc}-{$version}-installer.jar",
-                    "gameVersions" => [$mc],
+                "filename"     => "modpack.jar",
+                "gameVersions" => [$mc],
             ];
         }
 

@@ -27,7 +27,7 @@ class Fabric extends ModProvider
         return true;
     }
 
-    public static function search(string $query, int $page = 1): object
+    public static function search(string $query, int $page = 1, string $gameVersion = '', string $loader = ''): object
     {
         $mods = [];
         $data = static::request("/v2/versions/game") ?? [];
@@ -38,6 +38,10 @@ class Fabric extends ModProvider
             }
 
             if (!empty($query) && stripos($mod->version ?? '', $query) === false) {
+                continue;
+            }
+
+            if (!empty($gameVersion) && stripos($mod->version ?? '', $gameVersion) === false) {
                 continue;
             }
 
@@ -108,10 +112,10 @@ class Fabric extends ModProvider
                 $key = "{$game}-{$ver}";
 
                 $modData->versions[$key] = (object) [
-                    "url" => static::apiUrl()
+                    "url"          => static::apiUrl()
                         . "/v2/versions/loader/{$game}/{$ver}/profile/json",
-                    "filename" => "version.json",
-                    "gameVersions" => [$game]
+                    "filename"     => "version.json",
+                    "gameVersions" => [$game],
                 ];
             }
         }
