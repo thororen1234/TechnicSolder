@@ -93,7 +93,7 @@
                      }">
                     <a href="{{ url('modpack/list') }}" class="block pl-13 pr-5 py-1.5 text-sm text-slate-300 hover:text-white transition-colors">Modpack List</a>
                     <a href="{{ url('modpack/create') }}" class="block pl-13 pr-5 py-1.5 text-sm text-slate-300 hover:text-white transition-colors">Add Modpack</a>
-                    <a href="{{ url('modpack/create') }}" class="block pl-13 pr-5 py-1.5 text-sm text-slate-300 hover:text-white transition-colors">Import Modpack</a>
+                    <a href="{{ url('modpack/import') }}" class="block pl-13 pr-5 py-1.5 text-sm text-slate-300 hover:text-white transition-colors">Import Modpack</a>
                     <div class="px-3 py-1.5">
                         <input type="text"
                                x-init="$watch('sections.modpacks', v => { if (v) setTimeout(() => $el.focus(), 200) })"
