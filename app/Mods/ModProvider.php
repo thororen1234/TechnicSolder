@@ -64,7 +64,11 @@ abstract class ModProvider
             $forgeData = $zip->getFromName('mcmod.info');
             if ($forgeData !== false) {
                 $tmpData = json_decode($forgeData)[0];
-                $modVersion = "$tmpData->mcversion-$tmpData->version";
+                $mcVer = $tmpData->mcversion ?? '';
+                $ver = $tmpData->version ?? '';
+                if (! str_contains($ver, '${') && ! str_contains($mcVer, '${') && ! empty($ver)) {
+                    $modVersion = "$mcVer-$ver";
+                }
             }
 
             $fabricData = $zip->getFromName('fabric.mod.json');

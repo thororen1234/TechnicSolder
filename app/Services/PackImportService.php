@@ -3,11 +3,13 @@
 namespace App\Services;
 
 use App\Models\Build;
+use App\Models\Mod;
 use App\Models\Modpack;
 use App\Models\Modversion;
 use App\Mods\Providers\CurseForge;
 use App\Mods\Providers\Modrinth;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Str;
 use ZipArchive;
 
 class PackImportService
@@ -158,8 +160,11 @@ class PackImportService
             $downloadUrl = $downloads[0];
 
             if (! preg_match('#/data/([^/]+)/versions/([^/]+)/#', $downloadUrl, $m)) {
-                $this->errors[] = 'Could not parse download URL for: ' . basename($file->path ?? 'unknown file');
-                $this->skipped++;
+                $mvId = $this->installFromDirectUrl($downloadUrl, $file->path ?? basename($downloadUrl));
+                if ($mvId !== null) {
+                    $modversionIds[] = $mvId;
+                    $this->imported++;
+                }
                 continue;
             }
 
@@ -255,6 +260,174 @@ class PackImportService
         }
 
         return null;
+    }
+
+    private function installFromDirectUrl(string $url, string $filePath): ?int
+    {
+        $filename = basename($filePath);
+        $slug = $this->slugFromFilename($filename);
+
+        try {
+            $tmpPath = tempnam(sys_get_temp_dir(), 'solder_mod_');
+            $fp = fopen($tmpPath, 'wb');
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_FILE           => $fp,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_USERAGENT      => 'TechnicPack/TechnicSolder/' . SOLDER_VERSION,
+                CURLOPT_TIMEOUT        => 60,
+            ]);
+            curl_exec($ch);
+            $curlError = curl_error($ch);
+            curl_close($ch);
+            fclose($fp);
+
+            if ($curlError) {
+                $this->errors[] = "Failed to download $filename: $curlError";
+                $this->skipped++;
+                unlink($tmpPath);
+                return null;
+            }
+
+            $zip = new ZipArchive();
+            if ($zip->open($tmpPath, ZipArchive::RDONLY) !== true) {
+                $this->errors[] = "Could not open $filename as a zip/jar archive";
+                $this->skipped++;
+                unlink($tmpPath);
+                return null;
+            }
+
+            $modVersion = $this->parseVersionFromJar($zip);
+            $zip->close();
+
+            if (empty($modVersion)) {
+                $this->errors[] = "Could not detect version for $filename";
+                $this->skipped++;
+                unlink($tmpPath);
+                return null;
+            }
+
+            $mod = Mod::firstOrCreate(['name' => $slug], ['pretty_name' => $slug]);
+
+            $existing = Modversion::where(['mod_id' => $mod->id, 'version' => $modVersion])->first();
+            if ($existing) {
+                unlink($tmpPath);
+                return $existing->id;
+            }
+
+            $location = config('solder.repo_location');
+            $finalPath = $location . "mods/$slug/$slug-$modVersion.zip";
+            if (filter_var($finalPath, FILTER_VALIDATE_URL)) {
+                $this->errors[] = "Remote repo — cannot save $filename";
+                $this->skipped++;
+                unlink($tmpPath);
+                return null;
+            }
+
+            if (! file_exists(dirname($finalPath))) {
+                mkdir(dirname($finalPath), 0777, true);
+            }
+
+            $out = new ZipArchive();
+            $out->open($finalPath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+            $out->addFile($tmpPath, "mods/$filename");
+            $out->close();
+            unlink($tmpPath);
+
+            $mv = new Modversion();
+            $mv->mod_id = $mod->id;
+            $mv->version = $modVersion;
+            $mv->filesize = filesize($finalPath);
+            $mv->md5 = md5_file($finalPath);
+            $mv->save();
+
+            return $mv->id;
+        } catch (\Throwable $e) {
+            $this->errors[] = "Could not install $filename: " . $e->getMessage();
+            $this->skipped++;
+            return null;
+        }
+    }
+
+    private function slugFromFilename(string $filename): string
+    {
+        $base = pathinfo($filename, PATHINFO_FILENAME);
+        $parts = preg_split('/[-_+]/', $base);
+        $slugParts = [];
+        foreach ($parts as $part) {
+            if (preg_match('/^\d/', $part)) {
+                break;
+            }
+            $slugParts[] = $part;
+        }
+        $slug = Str::slug(implode('-', $slugParts));
+        return $slug ?: Str::slug($base);
+    }
+
+    private function parseVersionFromJar(ZipArchive $zip): string
+    {
+        $fabricData = $zip->getFromName('fabric.mod.json');
+        if ($fabricData !== false) {
+            $data = json_decode($fabricData);
+            if ($data !== null) {
+                $mcVersion = '';
+                if (property_exists($data, 'depends') && property_exists($data->depends, 'minecraft')) {
+                    $mcVersion = preg_replace('/[^0-9\.]/i', '', explode('-', $data->depends->minecraft)[0]);
+                    $mcVersion = $mcVersion ? "$mcVersion-" : '';
+                }
+                return $mcVersion . ($data->version ?? '');
+            }
+        }
+
+        $forgeData = $zip->getFromName('mcmod.info');
+        if ($forgeData !== false) {
+            $data = json_decode($forgeData)[0] ?? null;
+            $mcVer = $data->mcversion ?? '';
+            $ver = $data->version ?? '';
+            if ($data && ! str_contains($ver, '${') && ! str_contains($mcVer, '${') && ! empty($ver)) {
+                return "$mcVer-$ver";
+            }
+        }
+
+        $riftData = $zip->getFromName('riftmod.json');
+        if ($riftData !== false) {
+            return json_decode($riftData)->version ?? '';
+        }
+
+        $tomlData = $zip->getFromName('META-INF/mods.toml');
+        if ($tomlData !== false) {
+            $parsedVersion = '';
+            if (preg_match('/\[\[mods\]\](.*?)(?=\[\[|\z)/s', $tomlData, $modsMatch) &&
+                preg_match('/\bversion\s*=\s*"([^"]+)"/', $modsMatch[1], $verMatch)) {
+                $parsedVersion = $verMatch[1];
+            }
+
+            if ($parsedVersion === '${file.jarVersion}') {
+                $manifest = $zip->getFromName('META-INF/MANIFEST.MF');
+                if ($manifest !== false &&
+                    preg_match('/^Implementation-Version:\s*(.+)$/m', $manifest, $manifestMatch)) {
+                    $parsedVersion = trim($manifestMatch[1]);
+                } else {
+                    $parsedVersion = '';
+                }
+            }
+
+            if (! empty($parsedVersion)) {
+                $mcVer = '';
+                if (preg_match_all('/\[\[dependencies\.[^\]]+\]\](.*?)(?=\[\[|\z)/s', $tomlData, $depMatches)) {
+                    foreach ($depMatches[1] as $depBlock) {
+                        if (preg_match('/\bmodId\s*=\s*"minecraft"/i', $depBlock) &&
+                            preg_match('/\bversionRange\s*=\s*"\[([0-9][0-9.]+)/i', $depBlock, $mcMatch)) {
+                            $mcVer = $mcMatch[1];
+                            break;
+                        }
+                    }
+                }
+                return empty($mcVer) ? $parsedVersion : "$mcVer-$parsedVersion";
+            }
+        }
+
+        return '';
     }
 
     private function createModpack(string $slug, string $name): Modpack

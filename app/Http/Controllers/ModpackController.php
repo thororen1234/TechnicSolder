@@ -363,13 +363,19 @@ class ModpackController extends Controller
     {
         $this->authorize('create', Modpack::class);
 
+        $source = Request::input('source');
+
         $rules = [
             'name'   => 'required',
             'slug'   => 'required|unique:modpacks|alpha_dash',
             'source' => 'required|in:file,url',
-            'file'   => 'required_if:source,file|file',
-            'url'    => 'required_if:source,url|url',
         ];
+
+        if ($source === 'file') {
+            $rules['file'] = 'required|file';
+        } else {
+            $rules['url'] = 'required|url';
+        }
 
         $validation = Validator::make(Request::all(), $rules);
         if ($validation->fails()) {
