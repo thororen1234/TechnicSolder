@@ -10,10 +10,16 @@
     <div class="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800">
         <div class="px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-gray-200 dark:border-gray-800">
             <span class="font-semibold text-gray-900 dark:text-white">Modpack List</span>
-            <a href="{{ url('modpack/create') }}"
-               class="self-start bg-green-600 hover:bg-green-700 text-white dark:bg-green-500/15 dark:text-green-400 dark:hover:bg-green-500/25 font-medium py-1.5 px-3 rounded-lg text-xs transition-colors">
-                Create Modpack
-            </a>
+            <div class="flex gap-2">
+                <a href="{{ url('modpack/create') }}"
+                   class="self-start bg-green-600 hover:bg-green-700 text-white dark:bg-green-500/15 dark:text-green-400 dark:hover:bg-green-500/25 font-medium py-1.5 px-3 rounded-lg text-xs transition-colors">
+                    Create Modpack
+                </a>
+                <a href="{{ route('modpack.import') }}"
+                   class="self-start bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-500/15 dark:text-blue-400 dark:hover:bg-blue-500/25 font-medium py-1.5 px-3 rounded-lg text-xs transition-colors">
+                    Import Modpack
+                </a>
+            </div>
         </div>
         <div class="p-5">
             @session('success')

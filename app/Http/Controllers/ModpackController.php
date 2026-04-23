@@ -9,6 +9,7 @@ use App\Models\Client;
 use App\Models\Mod;
 use App\Models\Modpack;
 use App\Models\Modversion;
+use App\Services\PackImportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
@@ -349,6 +350,61 @@ class ModpackController extends Controller
         }
 
         return redirect('modpack/build/'.$build->id);
+    }
+
+    public function getImportModpack(): View
+    {
+        $this->authorize('create', Modpack::class);
+
+        return view('modpack.import');
+    }
+
+    public function postImportModpack(): RedirectResponse
+    {
+        $this->authorize('create', Modpack::class);
+
+        $rules = [
+            'name'   => 'required',
+            'slug'   => 'required|unique:modpacks|alpha_dash',
+            'source' => 'required|in:file,url',
+            'file'   => 'required_if:source,file|file',
+            'url'    => 'required_if:source,url|url',
+        ];
+
+        $validation = Validator::make(Request::all(), $rules);
+        if ($validation->fails()) {
+            return redirect('modpack/import')->withErrors($validation->messages())->withInput();
+        }
+
+        $name = Request::input('name');
+        $slug = Str::slug(Request::input('slug'));
+
+        $service = new PackImportService();
+
+        if (Request::input('source') === 'file') {
+            $result = $service->importFromFile(Request::file('file'), $name, $slug);
+        } else {
+            $result = $service->importFromUrl(Request::input('url'), $name, $slug);
+        }
+
+        if (isset($result['error'])) {
+            return redirect('modpack/import')->withErrors([$result['error']])->withInput();
+        }
+
+        Auth::user()->permission->grantModpackAccess($result['modpack_id']);
+        Cache::forget('modpacks');
+        Cache::forget('allmodpacks');
+
+        $msg = "{$result['imported']} mod(s) imported.";
+        if ($result['skipped'] > 0) {
+            $msg .= " {$result['skipped']} skipped.";
+        }
+
+        $redirect = redirect("modpack/view/{$result['modpack_id']}")->with('success', $msg);
+
+        return ! empty($result['errors'])
+            ? $redirect->withErrors($result['errors'])
+            : $redirect;
     }
 
     public function getCreate(): View
