@@ -70,6 +70,7 @@ class ModUploadService
 
         $metadata = JarMetadata::describe($zip);
         $detected = JarMetadata::detectVersion($zip);
+        $environment = JarMetadata::environment($zip);
         $zip->close();
 
         $declared = $metadata['mods'][0] ?? null;
@@ -99,7 +100,7 @@ class ModUploadService
             return ['error' => "{$mod->name} $versionName already exists"];
         }
 
-        $modversion = new Modversion(['mod_id' => $mod->id, 'version' => $versionName]);
+        $modversion = new Modversion(['mod_id' => $mod->id, 'version' => $versionName, 'environment' => $environment]);
         $modversion->setRelation('mod', $mod);
         $finalPath = ModRepository::location($modversion);
 

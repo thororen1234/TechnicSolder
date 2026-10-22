@@ -309,6 +309,28 @@ class ModController extends Controller
     }
 
     /**
+     * Mark a mod version as client-only, server-only, or needed on both sides.
+     */
+    public function postVersionEnvironment($version_id): JsonResponse
+    {
+        $this->authorize('update', Modversion::class);
+
+        $modversion = Modversion::find($version_id);
+        if (empty($modversion)) {
+            return response()->json(['status' => 'error', 'reason' => 'Mod version not found'], 404);
+        }
+
+        $environment = Request::input('environment') ?: null;
+        if (! in_array($environment, [null, Modversion::CLIENT_ONLY, Modversion::SERVER_ONLY], true)) {
+            return response()->json(['status' => 'error', 'reason' => 'Unknown environment'], 422);
+        }
+
+        $modversion->update(['environment' => $environment]);
+
+        return response()->json(['status' => 'success', 'environment' => $environment]);
+    }
+
+    /**
      * Mod versions that no build uses, for cleaning up.
      */
     public function getUnused(): View

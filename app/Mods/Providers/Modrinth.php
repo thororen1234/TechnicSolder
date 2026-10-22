@@ -194,6 +194,11 @@ class Modrinth extends ModProvider
         $modData->thumbnailUrl = $mod->icon_url ?? null;
         $modData->thumbnailDesc = $modData->name;
         $modData->websiteUrl = 'https://modrinth.com/'.($mod->project_type ?? 'mod').'/'.$modData->slug;
+        $modData->environment = match (true) {
+            ($mod->server_side ?? null) === 'unsupported' => 'client',
+            ($mod->client_side ?? null) === 'unsupported' => 'server',
+            default => null,
+        };
         $modData->versions = [];
 
         return $modData;

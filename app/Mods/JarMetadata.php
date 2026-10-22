@@ -238,6 +238,22 @@ final class JarMetadata
     }
 
     /**
+     * The side a jar declares it runs on: "client", "server", or null for both or unknown.
+     * Only Fabric and Quilt declare this; Forge mods are assumed to run on both.
+     */
+    public static function environment(ZipArchive $zip): ?string
+    {
+        $fabric = self::json($zip, 'fabric.mod.json')->environment ?? null;
+        $quilt = self::json($zip, 'quilt.mod.json')->minecraft->environment ?? null;
+
+        return match ($fabric ?? $quilt) {
+            'client' => 'client',
+            'server', 'dedicated_server' => 'server',
+            default => null,
+        };
+    }
+
+    /**
      * Pull the first concrete Minecraft version out of a version range such as ">=1.20 <1.21", "~26.1" or "1.20.x".
      */
     public static function minecraftVersionFromRange(mixed $range): string

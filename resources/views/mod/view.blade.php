@@ -137,6 +137,7 @@
                                 @include('partial.data-table.sort-header', ['key' => 'version', 'label' => 'Version'])
                                 <th class="px-3 py-3">MD5</th>
                                 <th class="px-3 py-3 hidden sm:table-cell">Size</th>
+                                <th class="px-3 py-3 hidden md:table-cell">Side</th>
                                 <th class="px-5 py-3"><span class="sr-only">Actions</span></th>
                             </tr>
                         </thead>
@@ -162,6 +163,14 @@
                                                class="ui-control py-1 font-mono text-xs min-w-56">
                                     </td>
                                     <td class="px-3 py-2.5 text-gray-500 whitespace-nowrap hidden sm:table-cell" x-text="row.filesize"></td>
+                                    <td class="px-3 py-2.5 hidden md:table-cell">
+                                        <select x-model="row.environment" @change="saveEnvironment(row)" class="ui-control w-auto py-1 pl-2 text-xs"
+                                                :aria-label="'Where ' + row.version + ' is needed'" title="Server exports leave out client-only mods; client exports leave out server-only mods">
+                                            <option value="">Client &amp; server</option>
+                                            <option value="client">Client only</option>
+                                            <option value="server">Server only</option>
+                                        </select>
+                                    </td>
                                     <td class="px-5 py-2.5">
                                         <div class="flex items-center justify-end gap-1">
                                             <button @click="rehashVersion(row.id)" :disabled="rehashingVersions.includes(row.id)" class="ui-btn ui-btn-sm ui-btn-secondary"
@@ -177,7 +186,7 @@
                                     </td>
                                 </tr>
                                 <tr x-show="expandedVersions.includes(row.id)">
-                                    <td colspan="5" class="px-5 pb-4 pt-1 bg-gray-50/60 dark:bg-gray-900/40">
+                                    <td colspan="6" class="px-5 pb-4 pt-1 bg-gray-50/60 dark:bg-gray-900/40">
                                         <div class="grid grid-cols-1 md:grid-cols-2 gap-5 pl-9">
                                             <div class="space-y-3 text-sm">
                                                 <div>
@@ -318,6 +327,7 @@
                         'filesize' => $v->humanFilesize(),
                         'url' => config('solder.mirror_url') . 'mods/' . $mod->name . '/' . $mod->name . '-' . $v->version . '.zip',
                         'notes' => $v->notes ?? '',
+                        'environment' => $v->environment ?? '',
                         'provider' => isset(App\Mods\ModProviders::providers()[$v->provider ?? '']) ? App\Mods\ModProviders::providers()[$v->provider]::name() : null,
                         'savingNotes' => false,
                         'builds' => $builds->where('accessible', true)->values(),
@@ -577,6 +587,17 @@
                     if (this.rehashAllAborted) parts.push('aborted');
                     const type = errorCount > 0 ? 'error' : (warningCount > 0 ? 'warning' : 'success');
                     Alpine.store('toasts').add('Rehash complete: ' + parts.join(', '), type);
+                },
+
+                async saveEnvironment(row) {
+                    try {
+                        const data = await window.ajaxPost(@js(url('mod/version-environment')) + '/' + row.id, { environment: row.environment });
+                        if (data.status !== 'success') throw new Error(data.reason);
+                        const labels = { '': 'client and server', client: 'client only', server: 'server only' };
+                        Alpine.store('toasts').add(row.version + ' is now ' + labels[row.environment], 'success');
+                    } catch (error) {
+                        Alpine.store('toasts').add('Could not save: ' + (error.message || 'unknown error'), 'error');
+                    }
                 },
 
                 async saveVersionNotes(row) {

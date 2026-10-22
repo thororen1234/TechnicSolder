@@ -20,6 +20,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $provider Key of the ModProvider the file was imported from, e.g. "modrinth"
  * @property string|null $provider_project_id
  * @property string|null $provider_version_id
+ * @property string|null $environment "client" or "server" when only needed on one side, null when needed on both
  * @property-read Collection<int, Build> $builds
  * @property-read int|null $builds_count
  * @property-read mixed $url
@@ -49,7 +50,20 @@ class Modversion extends Model
         'provider',
         'provider_project_id',
         'provider_version_id',
+        'environment',
     ];
+
+    public const CLIENT_ONLY = 'client';
+
+    public const SERVER_ONLY = 'server';
+
+    /**
+     * Whether this version belongs in a client (or server) installation.
+     */
+    public function isNeededOn(string $side): bool
+    {
+        return $this->environment === null || $this->environment === $side;
+    }
 
     /**
      * Relative path of this version's zip in the mod repository.

@@ -193,11 +193,14 @@ class CurseForge extends ModProvider
     {
         $gameVersions = [];
         $loaders = [];
+        $sides = [];
         foreach ($file->gameVersions ?? [] as $tag) {
             if (preg_match('/^\d+\.\d+/', $tag)) {
                 $gameVersions[] = $tag;
             } elseif (isset(self::LOADER_TYPES[strtolower($tag)])) {
                 $loaders[] = strtolower($tag);
+            } elseif (in_array(strtolower($tag), ['client', 'server'], true)) {
+                $sides[] = strtolower($tag);
             }
         }
 
@@ -217,6 +220,8 @@ class CurseForge extends ModProvider
             },
             'folder' => $folder,
             'sha1' => $sha1,
+            // Files tagged for only one side ("Client" or "Server")
+            'environment' => count($sides) === 1 ? $sides[0] : null,
             // relationType 3 = required dependency
             'dependencies' => collect($file->dependencies ?? [])
                 ->filter(fn ($dependency) => ($dependency->relationType ?? 0) === 3)

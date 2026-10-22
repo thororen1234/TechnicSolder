@@ -44,6 +44,7 @@ Route::middleware('auth')->group(function () {
     Route::get('mod/import/{provider?}/{query?}', [ModController::class, 'getImport'])->name('mod.import');
     Route::post('mod/import/batch', [ModController::class, 'postImportBatch'])->name('mod.import_batch');
     Route::post('mod/upload', [ModController::class, 'postUpload'])->name('mod.upload');
+    Route::post('mod/version-environment/{version_id}', [ModController::class, 'postVersionEnvironment'])->name('mod.version_environment');
     Route::get('mod/unused', [ModController::class, 'getUnused'])->name('mod.unused');
     Route::post('mod/unused', [ModController::class, 'postUnused']);
     Route::post('mod/upload/{mod_id}', [ModController::class, 'postUploadVersions'])->name('mod.upload_versions');

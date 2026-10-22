@@ -216,6 +216,7 @@ class PackImportService
             }
 
             $modData->versions[$versionId]->folder = $this->folderFromPath($file->path ?? '');
+            $modData->versions[$versionId]->environment = $this->environmentFromIndex($file) ?? $modData->environment;
             $modData->versions[$versionId]->filename = basename($file->path ?? $modData->versions[$versionId]->filename);
             $this->report($done++, $total, "Downloading {$modData->name}");
             $this->installVersion(Modrinth::class, $projectId, $versionId, $modData, $modversionIds);
@@ -255,6 +256,7 @@ class PackImportService
             'label' => pathinfo($filename, PATHINFO_FILENAME),
             'gameVersions' => $minecraft !== '' ? [$minecraft] : [],
             'folder' => $this->folderFromPath($path),
+            'environment' => $this->environmentFromIndex($file),
             'sha1' => $file->hashes->sha1 ?? null,
             // Not actually from Modrinth, so don't record it as a Modrinth file
             'untracked' => true,
@@ -432,7 +434,7 @@ class PackImportService
                     ['mod_id' => $mod->id, 'version' => $versionData['version']],
                     ['md5' => $versionData['md5'] ?? '', 'filesize' => $versionData['filesize'] ?? 0] + array_intersect_key(
                         $versionData,
-                        array_flip(['provider', 'provider_project_id', 'provider_version_id'])
+                        array_flip(['provider', 'provider_project_id', 'provider_version_id', 'environment'])
                     ),
                 );
                 $modversionsByKey[$mod->name."\0".$modversion->version] = $modversion->id;
@@ -482,6 +484,14 @@ class PackImportService
         }
 
         return [$match[1], $match[2]];
+    }
+
+    /**
+     * "client" when a .mrpack file isn't used on servers. (Files the client doesn't use are skipped entirely.)
+     */
+    private function environmentFromIndex(object $file): ?string
+    {
+        return ($file->env->server ?? 'required') === 'unsupported' ? 'client' : null;
     }
 
     private function folderFromPath(string $path): string

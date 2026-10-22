@@ -138,7 +138,7 @@ class PackExportService
                 $mod = $modversion->mod;
                 $mods[$mod->name] ??= $mod->only(['name', 'pretty_name', 'author', 'description', 'link']) + ['versions' => []];
                 $mods[$mod->name]['versions'][$modversion->version] = $modversion->only([
-                    'version', 'md5', 'filesize', 'provider', 'provider_project_id', 'provider_version_id',
+                    'version', 'md5', 'filesize', 'provider', 'provider_project_id', 'provider_version_id', 'environment',
                 ]);
             }
         }
@@ -167,7 +167,7 @@ class PackExportService
 
     private function writeClient(Build $build, ZipArchive $out): void
     {
-        foreach ($this->archives($build) as $archive) {
+        foreach ($this->archives($build, $this->neededOn($build, 'client')) as $archive) {
             $this->copyEntries($archive, $out);
         }
     }
@@ -176,7 +176,8 @@ class PackExportService
     {
         $installer = null;
 
-        foreach ($this->archives($build) as $archive) {
+        // Client-only mods (minimaps, shaders...) can crash a dedicated server, so they are left out
+        foreach ($this->archives($build, $this->neededOn($build, 'server')) as $archive) {
             $this->copyEntries($archive, $out, function (string $name) use ($archive, &$installer) {
                 if ($name === 'bin/modpack.jar') {
                     $installer = $archive->getFromName($name);
@@ -211,6 +212,12 @@ class PackExportService
     private function writeMrpack(Build $build, ZipArchive $out): void
     {
         // Pass 1: hash every jar in mods/ so Modrinth-hosted files can be referenced instead of bundled
+        $environments = $build->modversions->pluck('environment', 'id');
+        $overridesFolder = fn (int $modversionId) => match ($environments[$modversionId] ?? null) {
+            'client' => 'client-overrides',
+            'server' => 'server-overrides',
+            default => 'overrides',
+        };
         $jars = [];
         foreach ($this->archives($build) as $key => $archive) {
             for ($i = 0; $i < $archive->numFiles; $i++) {
@@ -229,7 +236,7 @@ class PackExportService
                         'size' => strlen($contents),
                     ];
                 } else {
-                    $out->addFromString("overrides/$name", (string) $archive->getFromIndex($i));
+                    $out->addFromString($overridesFolder($key)."/$name", (string) $archive->getFromIndex($i));
                 }
             }
         }
@@ -250,7 +257,10 @@ class PackExportService
             $files[] = [
                 'path' => $jar['name'],
                 'hashes' => ['sha1' => $jar['sha1'], 'sha512' => $jar['sha512']],
-                'env' => ['client' => 'required', 'server' => 'required'],
+                'env' => [
+                    'client' => ($environments[$jar['archive']] ?? null) === 'server' ? 'unsupported' : 'required',
+                    'server' => ($environments[$jar['archive']] ?? null) === 'client' ? 'unsupported' : 'required',
+                ],
                 'downloads' => [$match->url],
                 'fileSize' => $jar['size'],
             ];
@@ -259,7 +269,7 @@ class PackExportService
         if (! empty($bundle)) {
             foreach ($this->archives($build, array_keys($bundle)) as $key => $archive) {
                 foreach ($bundle[$key] ?? [] as $name) {
-                    $out->addFromString("overrides/$name", (string) $archive->getFromName($name));
+                    $out->addFromString($overridesFolder($key)."/$name", (string) $archive->getFromName($name));
                 }
             }
         }
@@ -287,7 +297,7 @@ class PackExportService
         // Mods imported from CurseForge are referenced by ID; everything else is bundled as overrides
         $files = [];
         $bundled = [];
-        foreach ($build->modversions as $modversion) {
+        foreach ($build->modversions->filter(fn (Modversion $modversion) => $modversion->isNeededOn('client')) as $modversion) {
             if ($modversion->provider === 'curseforge' && ctype_digit((string) $modversion->provider_project_id) && ctype_digit((string) $modversion->provider_version_id)) {
                 $files[] = [
                     'projectID' => (int) $modversion->provider_project_id,
@@ -359,6 +369,16 @@ class PackExportService
                 $zip->close();
             }
         }
+    }
+
+    /**
+     * IDs of the build's mod versions used on the given side ("client" or "server").
+     *
+     * @return list<int>
+     */
+    private function neededOn(Build $build, string $side): array
+    {
+        return $build->modversions->filter(fn (Modversion $modversion) => $modversion->isNeededOn($side))->pluck('id')->values()->all();
     }
 
     /**

@@ -39,6 +39,9 @@ class ImportedModData
     /** Optional summary shown in search results instead of $summary. */
     public ?string $displaySummary = null;
 
+    /** "client" or "server" when the whole project only runs on one side (a version's own environment wins). */
+    public ?string $environment = null;
+
     /** @var array<string, object> */
     public $versions = [];
 }

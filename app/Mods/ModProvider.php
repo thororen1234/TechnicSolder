@@ -258,10 +258,16 @@ abstract class ModProvider
                 'provider_version_id' => $versionKey,
             ] : [];
 
+            // Client-only or server-only, from the provider or else the jar itself (loaders run on both sides)
+            $environment = static::useRawVersion() ? null : ($versionData->environment ?? $modData->environment ?? static::jarEnvironment($tmpFile));
+
             $existing = Modversion::where(['mod_id' => $mod->id, 'version' => $modVersion])->first();
             if ($existing) {
                 if ($existing->provider === null && $source !== []) {
                     $existing->update($source);
+                }
+                if ($existing->environment === null && $environment !== null) {
+                    $existing->update(['environment' => $environment]);
                 }
 
                 return ['id' => $existing->id, 'existing' => true];
@@ -282,7 +288,7 @@ abstract class ModProvider
             $zip->addFile($tmpFile, ($folder === '' ? '' : "$folder/").$fileName);
             $zip->close();
 
-            $modversion = new Modversion($source);
+            $modversion = new Modversion($source + ['environment' => $environment]);
             $modversion->mod_id = $mod->id;
             $modversion->version = $modVersion;
             $modversion->filesize = filesize($finalPath);
@@ -323,6 +329,22 @@ abstract class ModProvider
         }
 
         return $detected;
+    }
+
+    /**
+     * The side a downloaded jar declares it runs on, if any.
+     */
+    protected static function jarEnvironment(string $file): ?string
+    {
+        $zip = new ZipArchive;
+        if ($zip->open($file, ZipArchive::RDONLY) !== true) {
+            return null;
+        }
+
+        $environment = JarMetadata::environment($zip);
+        $zip->close();
+
+        return $environment;
     }
 
     /**
