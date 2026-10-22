@@ -6,6 +6,7 @@ use App\Libraries\UrlUtils;
 use App\Models\Mod;
 use App\Models\Modversion;
 use App\Mods\ModProviders;
+use App\Services\ModUploadService;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -294,6 +295,71 @@ class ModController extends Controller
         }
 
         return empty($errors) ? $redirect : $redirect->withErrors($errors);
+    }
+
+    /**
+     * Create mods (or new versions of existing mods) from uploaded jars.
+     */
+    public function postUpload(ModUploadService $uploads): RedirectResponse
+    {
+        $this->authorize('create', Mod::class);
+
+        $validation = Validator::make(Request::all(), [
+            'files' => ['required', 'array', 'min:1'],
+            'files.*' => ['file'],
+        ], ['files.required' => 'Choose at least one .jar file to upload.']);
+
+        if ($validation->fails()) {
+            return redirect('mod/list')->withErrors($validation->messages());
+        }
+
+        $result = $uploads->upload(Request::file('files'));
+
+        $redirect = count($result['created']) === 1
+            ? redirect('mod/view/'.$result['created'][0]['mod_id'])
+            : redirect('mod/list');
+
+        return $this->uploadResponse($redirect, $result);
+    }
+
+    /**
+     * Add uploaded files as new versions of a mod.
+     */
+    public function postUploadVersions(ModUploadService $uploads, $mod_id): RedirectResponse
+    {
+        $mod = Mod::find($mod_id);
+        if (empty($mod)) {
+            return redirect('mod/list')->withErrors(['Mod not found']);
+        }
+
+        $this->authorize('create', Modversion::class);
+
+        $validation = Validator::make(Request::all(), [
+            'files' => ['required', 'array', 'min:1'],
+            'files.*' => ['file'],
+            'version' => ['nullable', 'string', 'max:255'],
+        ], ['files.required' => 'Choose at least one file to upload.']);
+
+        if ($validation->fails()) {
+            return redirect('mod/view/'.$mod->id.'#versions')->withErrors($validation->messages());
+        }
+
+        $result = $uploads->upload(Request::file('files'), $mod, Request::input('version'));
+
+        return $this->uploadResponse(redirect('mod/view/'.$mod->id.'#versions'), $result);
+    }
+
+    /**
+     * @param  array{created: list<array{mod_id: int, mod: string, version: string}>, errors: list<string>}  $result
+     */
+    private function uploadResponse(RedirectResponse $redirect, array $result): RedirectResponse
+    {
+        if (! empty($result['created'])) {
+            $added = collect($result['created'])->map(fn ($created) => "{$created['mod']} {$created['version']}")->implode(', ');
+            $redirect->with('success', 'Added '.$added.'.');
+        }
+
+        return empty($result['errors']) ? $redirect : $redirect->withErrors($result['errors']);
     }
 
     public function getDelete($mod_id = null)

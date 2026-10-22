@@ -22,6 +22,16 @@
                 <p class="page-subtitle"><span x-text="totalRows"></span> <span x-text="totalRows === 1 ? 'mod' : 'mods'"></span> in the library</p>
             </div>
             <div class="flex items-center gap-2">
+                <form method="POST" action="{{ route('mod.upload') }}" enctype="multipart/form-data" x-data="{ uploading: false }">
+                    @csrf
+                    <label class="ui-btn ui-btn-secondary cursor-pointer" :class="uploading && 'opacity-50 pointer-events-none'"
+                           title="Create mods from .jar files; the name, author and version are read from each jar">
+                        <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"/></svg>
+                        <span x-text="uploading ? 'Uploading…' : 'Upload jars'">Upload jars</span>
+                        <input type="file" name="files[]" accept=".jar" multiple class="sr-only"
+                               @change="if ($event.target.files.length) { uploading = true; $el.form.submit() }">
+                    </label>
+                </form>
                 <a href="{{ url('mod/import') }}" class="ui-btn ui-btn-secondary">Import</a>
                 <a href="{{ url('mod/create') }}" class="ui-btn ui-btn-primary">
                     <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>

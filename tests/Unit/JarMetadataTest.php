@@ -141,6 +141,95 @@ final class JarMetadataTest extends TestCase
         $this->assertSame('26.1-4.2.0', $version);
     }
 
+    /**
+     * @param  array<string, string>  $files
+     */
+    private function describe(array $files): array
+    {
+        $path = tempnam(sys_get_temp_dir(), 'jar_metadata_test_');
+        $zip = new ZipArchive;
+        $zip->open($path, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+        foreach ($files as $name => $contents) {
+            $zip->addFromString($name, $contents);
+        }
+        $zip->close();
+
+        $zip->open($path, ZipArchive::RDONLY);
+        try {
+            return JarMetadata::describe($zip);
+        } finally {
+            $zip->close();
+            unlink($path);
+        }
+    }
+
+    public function test_describe_fabric_mod_with_dependencies_and_nested_jars(): void
+    {
+        $info = $this->describe(['fabric.mod.json' => json_encode([
+            'id' => 'fabric-api',
+            'name' => 'Fabric API',
+            'version' => '0.92.0',
+            'authors' => ['FabricMC'],
+            'depends' => ['fabricloader' => '>=0.15', 'minecraft' => '~1.20.1'],
+            'provides' => ['fabric'],
+            'jars' => [['file' => 'META-INF/jars/fabric-api-base.jar']],
+        ])]);
+
+        $this->assertSame(['fabric'], $info['loaders']);
+        $this->assertSame(['META-INF/jars/fabric-api-base.jar'], $info['nested']);
+        $this->assertSame('fabric-api', $info['mods'][0]['id']);
+        $this->assertSame('Fabric API', $info['mods'][0]['name']);
+        $this->assertSame('FabricMC', $info['mods'][0]['authors']);
+        $this->assertSame(['fabricloader', 'minecraft'], $info['mods'][0]['depends']);
+        $this->assertSame(['fabric'], $info['mods'][0]['provides']);
+        $this->assertSame('~1.20.1', $info['mods'][0]['minecraft']);
+    }
+
+    public function test_describe_forge_mod_keeps_only_mandatory_dependencies(): void
+    {
+        $toml = <<<'TOML'
+        [[mods]]
+        modId="create"
+        version="0.5.1"
+        displayName="Create"
+        authors="simibubi"
+        [[dependencies.create]]
+            modId="forge"
+            mandatory=true
+            versionRange="[47,)"
+        [[dependencies.create]]
+            modId="flywheel"
+            type="required"
+            versionRange="[0.6,)"
+        [[dependencies.create]]
+            modId="jei"
+            mandatory=false
+        [[dependencies.create]]
+            modId="minecraft"
+            mandatory=true
+            versionRange="[1.20.1,1.20.2)"
+        TOML;
+
+        $info = $this->describe(['META-INF/mods.toml' => $toml, 'META-INF/jarjar/metadata.json' => json_encode(['jars' => [['path' => 'META-INF/jarjar/flywheel.jar']]])]);
+
+        $this->assertSame(['forge'], $info['loaders']);
+        $this->assertSame(['META-INF/jarjar/flywheel.jar'], $info['nested']);
+        $this->assertSame('Create', $info['mods'][0]['name']);
+        $this->assertSame(['forge', 'flywheel', 'minecraft'], $info['mods'][0]['depends']);
+        $this->assertSame('[1.20.1,1.20.2)', $info['mods'][0]['minecraft']);
+    }
+
+    public function test_describe_legacy_forge_required_mods(): void
+    {
+        $info = $this->describe(['mcmod.info' => json_encode([[
+            'modid' => 'thaumcraft', 'name' => 'Thaumcraft', 'version' => '6.1', 'mcversion' => '1.12.2',
+            'requiredMods' => ['baubles@[1.5.2,)'],
+        ]])]);
+
+        $this->assertSame(['forge'], $info['loaders']);
+        $this->assertSame(['baubles'], $info['mods'][0]['depends']);
+    }
+
     public function test_archive_without_metadata_returns_empty_string(): void
     {
         $this->assertSame('', $this->detect(['assets/minecraft/textures/stone.png' => 'png']));
