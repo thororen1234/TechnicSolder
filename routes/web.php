@@ -89,6 +89,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('solder/configure', [SolderController::class, 'getConfigure'])->name('solder.configure');
     Route::get('solder/update', [SolderController::class, 'getUpdate'])->name('solder.update');
+    Route::get('solder/activity', [SolderController::class, 'getActivity'])->name('solder.activity');
     Route::get('solder/repository', [SolderController::class, 'getRepository'])->name('solder.repository');
     Route::post('solder/repository', [SolderController::class, 'postRepository']);
     Route::post('solder/repository/fix', [SolderController::class, 'postRepositoryFix'])->name('solder.repository.fix');

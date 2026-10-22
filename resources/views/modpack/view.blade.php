@@ -184,6 +184,14 @@
                 @include('partial.data-table.pagination')
             </div>
         </section>
+
+        <section class="ui-card overflow-hidden mt-6">
+            <div class="ui-card-header flex items-center justify-between">
+                <h2 class="section-title">Recent activity</h2>
+                <a href="{{ route('solder.activity', ['modpack' => $modpack->id]) }}" class="text-xs text-gray-500 hover:text-gray-950 dark:hover:text-white">All activity →</a>
+            </div>
+            @include('partial.activity-list', ['entries' => $activity, 'empty' => 'No changes recorded yet.'])
+        </section>
     </div>
 @endsection
 @push('scripts')

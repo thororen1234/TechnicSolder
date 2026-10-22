@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Jobs\CheckModRepository;
 use App\Libraries\MinecraftUtils;
 use App\Libraries\UpdateUtils;
+use App\Models\ActivityLog;
 use App\Models\Modversion;
 use App\Services\ModRepository;
 use App\Services\TaskTracker;
@@ -22,6 +23,23 @@ class SolderController extends Controller
     public function getConfigure()
     {
         return view('solder.configure');
+    }
+
+    /**
+     * Everything that changed, newest first. Users without full access only see modpacks they can manage.
+     */
+    public function getActivity(): View
+    {
+        $permission = Auth::user()->permission;
+
+        $entries = ActivityLog::with('user', 'modpack', 'build')
+            ->when(! $permission?->solder_full, fn ($query) => $query->whereIn('modpack_id', $permission?->modpacks ?? []))
+            ->when(Request::query('modpack'), fn ($query, $modpackId) => $query->where('modpack_id', $modpackId))
+            ->latest('id')
+            ->paginate(50)
+            ->withQueryString();
+
+        return view('solder.activity', ['entries' => $entries]);
     }
 
     /**

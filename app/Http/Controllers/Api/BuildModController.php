@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ActivityLog;
 use App\Models\Build;
 use App\Models\Mod;
 use App\Models\Modpack;
@@ -66,6 +67,10 @@ class BuildModController extends Controller
         }
 
         $build->modversions()->attach($modversion->id);
+        ActivityLog::record('build.mod_added', 'Added '.($mod->pretty_name ?: $mod->name)." {$modversion->version} to build {$build->version} (API)", build: $build, properties: [
+            'mod' => $mod->name,
+            'version' => $modversion->version,
+        ]);
 
         Cache::forget('modpack:'.$slug.':build:'.$version);
         Cache::forget('modpack:'.$slug);
@@ -122,6 +127,11 @@ class BuildModController extends Controller
 
         $build->modversions()->detach($oldModversion->id);
         $build->modversions()->attach($newModversion->id);
+        ActivityLog::record('build.mod_changed', 'Changed '.($mod->pretty_name ?: $mod->name)." from {$oldModversion->version} to {$newModversion->version} in build {$build->version} (API)", build: $build, properties: [
+            'mod' => $mod->name,
+            'from' => $oldModversion->version,
+            'to' => $newModversion->version,
+        ]);
 
         Cache::forget('modpack:'.$slug.':build:'.$version);
         Cache::forget('modpack:'.$slug);
@@ -162,6 +172,10 @@ class BuildModController extends Controller
         }
 
         $build->modversions()->detach($modversion->id);
+        ActivityLog::record('build.mod_removed', 'Removed '.($mod->pretty_name ?: $mod->name)." {$modversion->version} from build {$build->version} (API)", build: $build, properties: [
+            'mod' => $mod->name,
+            'version' => $modversion->version,
+        ]);
 
         Cache::forget('modpack:'.$slug.':build:'.$version);
         Cache::forget('modpack:'.$slug);

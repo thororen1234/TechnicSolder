@@ -188,6 +188,7 @@ const NAV_SECTIONS = [
             { label: 'Configuration', url: '/solder/configure' },
             { label: 'Updates', url: '/solder/update' },
             { label: 'Mod repository', url: '/solder/repository' },
+            { label: 'Activity', url: '/solder/activity' },
             { label: 'Users', url: '/user/list' },
             { label: 'Clients', url: '/client/list' },
             { label: 'Platform keys', url: '/key/list' },

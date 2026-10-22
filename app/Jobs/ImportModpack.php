@@ -2,6 +2,8 @@
 
 namespace App\Jobs;
 
+use App\Models\ActivityLog;
+use App\Models\Modpack;
 use App\Models\User;
 use App\Services\PackImportService;
 use App\Services\TaskTracker;
@@ -58,6 +60,10 @@ class ImportModpack implements ShouldQueue
         }
 
         User::find($this->userId)?->permission?->grantModpackAccess($result['modpack_id']);
+        ActivityLog::record('modpack.imported', "Imported modpack {$this->name}", Modpack::find($result['modpack_id']), userId: $this->userId, properties: [
+            'imported' => $result['imported'],
+            'skipped' => $result['skipped'],
+        ]);
         Cache::forget('modpacks');
         Cache::forget('allmodpacks');
 

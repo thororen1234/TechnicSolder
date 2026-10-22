@@ -8,6 +8,7 @@ use App\Jobs\ExportBuild;
 use App\Jobs\ImportModpack;
 use App\Jobs\UpdateBuild;
 use App\Libraries\MinecraftUtils;
+use App\Models\ActivityLog;
 use App\Models\Build;
 use App\Models\Client;
 use App\Models\Mod;
@@ -69,7 +70,9 @@ class ModpackController extends Controller
 
         $this->authorize('update', $modpack);
 
-        return view('modpack.view')->with('modpack', $modpack);
+        return view('modpack.view')
+            ->with('modpack', $modpack)
+            ->with('activity', ActivityLog::with('user', 'build')->where('modpack_id', $modpack->id)->latest('id')->limit(15)->get());
     }
 
     public function getBuild($build_id = null)
@@ -89,7 +92,8 @@ class ModpackController extends Controller
 
         return view('modpack.build.view')
             ->with('build', $build)
-            ->with('mods', $mods);
+            ->with('mods', $mods)
+            ->with('activity', ActivityLog::with('user')->where('build_id', $build->id)->latest('id')->limit(50)->get());
     }
 
     public function getExportBuild($build_id = null): StreamedResponse|RedirectResponse
@@ -266,7 +270,7 @@ class ModpackController extends Controller
         }
 
         $taskId = TaskTracker::create(Auth::id(), "Updating {$build->modpack->name} to {$validation->validated()['version']}");
-        $this->runTask(new UpdateBuild($taskId, $build->id, $validation->validated()['version'], array_map('intval', Request::input('modversions'))));
+        $this->runTask(new UpdateBuild($taskId, $build->id, $validation->validated()['version'], array_map('intval', Request::input('modversions')), Auth::id()));
 
         $task = TaskTracker::get($taskId);
         if ($task['status'] === 'completed') {
@@ -374,6 +378,8 @@ class ModpackController extends Controller
         Cache::forget('modpack:'.$build->modpack->slug);
         Cache::forget('modpack:'.$build->modpack->slug.':build:'.$build->version);
 
+        ActivityLog::record('build.edited', "Edited the details of build {$build->version}", build: $build);
+
         return redirect('modpack/build/'.$build->id);
     }
 
@@ -410,6 +416,7 @@ class ModpackController extends Controller
         $buildVersion = $build->version;
         $build->modversions()->sync([]);
         $build->delete();
+        ActivityLog::record('build.deleted', "Deleted build {$build->version}", $build->modpack);
         if ($switchrec) {
             $recbuild = Build::where('modpack_id', '=', $modpack->id)
                 ->orderBy('id', 'desc')->first();
@@ -512,6 +519,7 @@ class ModpackController extends Controller
         $build->java_runtime = Request::input('java-runtime');
         $build->min_memory = Request::input('memory-enabled') ? Request::input('memory') : 0;
         $build->save();
+        ActivityLog::record('build.created', "Created build {$build->version}", build: $build);
         Cache::forget('modpack:'.$modpack->slug);
         if (! empty($clone)) {
             $clone_build = Build::with('modpack')->find($clone);
@@ -638,6 +646,7 @@ class ModpackController extends Controller
         $modpack->background_md5 = null;
         $modpack->background_url = URL::asset('/resources/default/background.jpg');
         $modpack->save();
+        ActivityLog::record('modpack.created', "Created modpack {$modpack->name}", $modpack);
         Cache::forget('modpacks');
         Cache::forget('allmodpacks');
 
@@ -736,6 +745,8 @@ class ModpackController extends Controller
         Cache::forget('modpacks');
         Cache::forget('allmodpacks');
 
+        ActivityLog::record('modpack.created', "Cloned {$modpack->name} as {$newModpack->name}", $newModpack);
+
         return redirect('modpack/view/'.$newModpack->id);
     }
 
@@ -809,6 +820,8 @@ class ModpackController extends Controller
             $modpack->clients()->sync([]);
         }
 
+        ActivityLog::record('modpack.edited', "Edited the details of {$modpack->name}", $modpack);
+
         return redirect('modpack/edit/'.$modpack->id)->with('success', 'Modpack saved');
     }
 
@@ -841,6 +854,7 @@ class ModpackController extends Controller
 
         $modpack->clients()->sync([]);
         $modpack->delete();
+        ActivityLog::record('modpack.deleted', "Deleted modpack {$modpack->name}", $modpack);
         Cache::forget('modpack:'.$modpack->slug);
         Cache::forget('modpacks');
         Cache::forget('allmodpacks');
@@ -881,6 +895,7 @@ class ModpackController extends Controller
                 } else {
                     $status = 'success';
                     Cache::forget('modpack:'.$build->modpack->slug.':build:'.$build->version);
+                    $this->recordVersionChanges($build, [[$modversion_id, $version_id]]);
                 }
 
                 return response()->json([
@@ -890,6 +905,7 @@ class ModpackController extends Controller
             case 'delete': // Remove mod version from build
                 $build = Build::with('modpack')->findOrFail(Request::input('build_id'));
                 $this->authorize('update', [Build::class, $build->modpack]);
+                $removed = Modversion::with('mod')->find(Request::input('modversion_id'));
                 $affected = DB::table('build_modversion')
                     ->where('build_id', '=', $build->id)
                     ->where('modversion_id', '=', Request::input('modversion_id'))
@@ -899,6 +915,10 @@ class ModpackController extends Controller
                     $status = 'failed';
                 } else {
                     Cache::forget('modpack:'.$build->modpack->slug.':build:'.$build->version);
+                    ActivityLog::record('build.mod_removed', "Removed {$removed->mod->pretty_name} {$removed->version} from build {$build->version}", build: $build, properties: [
+                        'mod' => $removed->mod->name,
+                        'version' => $removed->version,
+                    ]);
                 }
 
                 return response()->json([
@@ -932,6 +952,10 @@ class ModpackController extends Controller
                     ]);
                 } else {
                     $build->modversions()->attach($ver->id);
+                    ActivityLog::record('build.mod_added', 'Added '.($mod->pretty_name ?: $mod->name)." {$ver->version} to build {$build->version}", build: $build, properties: [
+                        'mod' => $mod->name,
+                        'version' => $ver->version,
+                    ]);
 
                     Cache::forget('modpack:'.$build->modpack->slug);
                     Cache::forget('modpack:'.$build->modpack->slug.':build:'.$build->version);
@@ -957,6 +981,7 @@ class ModpackController extends Controller
                 $new_version = Request::input('recommended');
                 $modpack->recommended = $new_version;
                 $modpack->save();
+                ActivityLog::record('modpack.recommended', "Set the recommended build to $new_version", $modpack);
 
                 Cache::forget('modpack:'.$modpack->slug);
 
@@ -970,6 +995,7 @@ class ModpackController extends Controller
                 $new_version = Request::input('latest');
                 $modpack->latest = $new_version;
                 $modpack->save();
+                ActivityLog::record('modpack.latest', "Set the latest build to $new_version", $modpack);
 
                 Cache::forget('modpack:'.$modpack->slug);
 
@@ -988,6 +1014,7 @@ class ModpackController extends Controller
                 Cache::forget('modpack:'.$build->modpack->slug.':build:'.$build->version);
 
                 $state = $build->is_published ? 'published' : 'unpublished';
+                ActivityLog::record('build.'.$state, ucfirst($state)." build {$build->version}", build: $build);
 
                 return response()->json([
                     'success' => 'Build '.$build->version.' is now '.$state,
@@ -1003,6 +1030,7 @@ class ModpackController extends Controller
                 Cache::forget('modpack:'.$build->modpack->slug.':build:'.$build->version);
 
                 $state = $build->private ? 'private' : 'public';
+                ActivityLog::record('build.'.$state, "Made build {$build->version} $state", build: $build);
 
                 return response()->json([
                     'success' => 'Build '.$build->version.' is now '.$state,
@@ -1045,6 +1073,7 @@ class ModpackController extends Controller
                 });
 
                 Cache::forget('modpack:'.$build->modpack->slug.':build:'.$build->version);
+                $this->recordVersionChanges($build, array_map(fn ($change) => [$change['old'], $change['new']], $validated));
 
                 return response()->json([
                     'status' => 'success',
@@ -1052,6 +1081,31 @@ class ModpackController extends Controller
                 ]);
             default:
                 abort(400);
+        }
+    }
+
+    /**
+     * Log mod version changes in a build.
+     *
+     * @param  list<array{0: int|string, 1: int|string}>  $changes  [old modversion ID, new modversion ID]
+     */
+    private function recordVersionChanges(Build $build, array $changes): void
+    {
+        $modversions = Modversion::with('mod')->findMany(array_merge(...$changes))->keyBy('id');
+
+        foreach ($changes as [$oldId, $newId]) {
+            $old = $modversions[(int) $oldId] ?? null;
+            $new = $modversions[(int) $newId] ?? null;
+
+            if ($old === null || $new === null || $old->id === $new->id) {
+                continue;
+            }
+
+            ActivityLog::record('build.mod_changed', "Changed {$new->mod->pretty_name} from {$old->version} to {$new->version} in build {$build->version}", build: $build, properties: [
+                'mod' => $new->mod->name,
+                'from' => $old->version,
+                'to' => $new->version,
+            ]);
         }
     }
 }

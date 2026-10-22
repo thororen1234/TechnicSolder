@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Models\ActivityLog;
 use App\Models\Build;
 use App\Services\BuildUpdateService;
 use App\Services\TaskTracker;
@@ -29,6 +30,7 @@ class UpdateBuild implements ShouldQueue
         public int $buildId,
         public string $newVersion,
         public array $modversionIds,
+        public ?int $userId = null,
     ) {}
 
     public function handle(): void
@@ -44,6 +46,13 @@ class UpdateBuild implements ShouldQueue
             fn (int $done, int $total, string $message) => TaskTracker::progress($this->taskId, $done, $total, $message)
         );
         $result = $service->apply($build, $this->newVersion, $this->modversionIds);
+
+        ActivityLog::record(
+            'build.created',
+            "Created build {$result['build']->version} from {$build->version} with {$result['updated']} ".Str::plural('update', $result['updated']),
+            build: $result['build'],
+            userId: $this->userId,
+        );
 
         TaskTracker::complete($this->taskId, [
             'url' => url('modpack/build/'.$result['build']->id),

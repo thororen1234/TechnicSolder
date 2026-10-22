@@ -91,10 +91,10 @@
         </div>
     </div>
 
-    <div x-data="{ tab: ['health', 'updates'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'mods' }"
+    <div x-data="{ tab: ['health', 'updates', 'activity'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'mods' }"
          x-init="$watch('tab', value => history.replaceState(null, '', value === 'mods' ? location.pathname : '#' + value))">
         <nav class="flex items-center gap-1 mb-6 border-b border-gray-200 dark:border-gray-800" aria-label="Build sections">
-            @foreach (['mods' => 'Mods', 'health' => 'Health', 'updates' => 'Updates'] as $key => $title)
+            @foreach (['mods' => 'Mods', 'health' => 'Health', 'updates' => 'Updates', 'activity' => 'Activity'] as $key => $title)
                 <button type="button" @click="tab = '{{ $key }}'"
                         class="relative px-3 py-2 text-sm transition-colors"
                         :class="tab === '{{ $key }}' ? 'text-gray-950 dark:text-white' : 'text-gray-500 hover:text-gray-950 dark:hover:text-white'"
@@ -252,6 +252,12 @@
                     </div>
                 </div>
             </form>
+        </section>
+
+        {{-- Activity --}}
+        <section x-show="tab === 'activity'" x-cloak class="ui-card overflow-hidden">
+            <div class="ui-card-header"><h2 class="section-title">Activity</h2></div>
+            @include('partial.activity-list', ['entries' => $activity, 'empty' => 'No changes to this build have been recorded yet.'])
         </section>
     </div>
 @endsection
