@@ -8,6 +8,7 @@ use App\Models\Mod;
 use App\Models\Modpack;
 use App\Models\Modversion;
 use App\Models\User;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -37,6 +38,21 @@ final class ModpackTest extends TestCase
         $response = $this->get('/modpack/list');
 
         $response->assertOk();
+    }
+
+    public function test_modpack_icons_fall_back_to_the_default_when_they_fail_to_load(): void
+    {
+        $modpack = Modpack::create(['name' => 'Moved Pack', 'slug' => 'moved-pack', 'icon_url' => 'https://old.example.com/resources/default/icon.png']);
+        $build = Build::create(['modpack_id' => $modpack->id, 'version' => '1.0', 'minecraft' => '1.20.1']);
+        $fallback = 'onerror="this.onerror = null; this.src = \''.asset('/resources/default/icon.png').'\'"';
+
+        // Modpack page: its header icon and its icon in the modpack rail
+        $page = $this->get("/modpack/view/{$modpack->id}")->assertOk();
+        $page->assertSee('src="https://old.example.com/resources/default/icon.png" alt="" '.$fallback, false);
+        $this->assertGreaterThanOrEqual(2, substr_count($page->getContent(), $fallback));
+
+        $this->get('/modpack/list')->assertOk()->assertSee('<img :src="row.icon_url" alt="" '.$fallback, false);
+        $this->get("/modpack/build/{$build->id}")->assertOk()->assertSee($fallback, false);
     }
 
     public function test_modpack_create_get(): void
@@ -309,7 +325,7 @@ final class ModpackTest extends TestCase
 
     public function test_modify_batch_version_updates_multiple_mods(): void
     {
-        $this->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class);
+        $this->withoutMiddleware(PreventRequestForgery::class);
 
         $modpack = Modpack::firstOrFail();
         $build = $modpack->builds()->firstOrFail();
@@ -350,7 +366,7 @@ final class ModpackTest extends TestCase
 
     public function test_modify_batch_version_with_empty_changes(): void
     {
-        $this->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class);
+        $this->withoutMiddleware(PreventRequestForgery::class);
 
         $modpack = Modpack::firstOrFail();
         $build = $modpack->builds()->firstOrFail();

@@ -55,7 +55,7 @@
                    @focus="showTip($el, @js($railModpack->name))"
                    @blur="tip.show = false">
                     <span class="rail-indicator"></span>
-                    <img src="{{ $railModpack->icon_url ?? asset('/resources/default/icon.png') }}" alt="" class="size-full rounded-[inherit] object-cover">
+                    <img src="{{ $railModpack->icon_url ?? asset('/resources/default/icon.png') }}" alt="" onerror="this.onerror = null; this.src = '{{ asset('/resources/default/icon.png') }}'" class="size-full rounded-[inherit] object-cover">
                     @if ($railModpack->private || $railModpack->hidden)
                         <span class="absolute -bottom-1 -right-1 flex items-center justify-center size-4 rounded-full bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400">
                             @if ($railModpack->private)
@@ -240,7 +240,7 @@
                                         :data-active="active === item.index"
                                         class="flex w-full items-center gap-3 px-2.5 py-2 rounded-lg text-sm text-left text-gray-700 dark:text-gray-300 data-[active=true]:bg-gray-100 data-[active=true]:text-gray-950 dark:data-[active=true]:bg-gray-900 dark:data-[active=true]:text-white">
                                     <span class="flex items-center justify-center size-6 shrink-0 rounded-md border border-gray-200 dark:border-gray-800 text-gray-400 overflow-hidden">
-                                        <template x-if="item.icon"><img :src="item.icon" alt="" class="size-full object-cover"></template>
+                                        <template x-if="item.icon"><img :src="item.icon" alt="" onerror="this.onerror = null; this.src = '{{ asset('/resources/default/icon.png') }}'" class="size-full object-cover"></template>
                                         <template x-if="!item.icon && item.type === 'page'">
                                             <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5"/></svg>
                                         </template>

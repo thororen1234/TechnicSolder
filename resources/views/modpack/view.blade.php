@@ -6,7 +6,7 @@
     <div x-data="buildManager()">
         <div class="page-header">
             <div class="flex items-center gap-4 min-w-0">
-                <img src="{{ $modpack->icon_url ?? asset('/resources/default/icon.png') }}" alt="" class="size-14 shrink-0 rounded-2xl border border-gray-200 dark:border-gray-800 object-cover">
+                <img src="{{ $modpack->icon_url ?? asset('/resources/default/icon.png') }}" alt="" onerror="this.onerror = null; this.src = '{{ asset('/resources/default/icon.png') }}'" class="size-14 shrink-0 rounded-2xl border border-gray-200 dark:border-gray-800 object-cover">
                 <div class="min-w-0">
                     <h1 class="page-title truncate">{{ $modpack->name }}</h1>
                     <div class="mt-1 flex items-center gap-2 flex-wrap">

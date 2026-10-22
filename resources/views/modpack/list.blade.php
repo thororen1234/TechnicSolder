@@ -58,7 +58,7 @@
             <template x-for="row in paged" :key="row.id">
                 <div class="ui-card relative group p-4 hover:border-gray-300 dark:hover:border-gray-700 transition-colors">
                     <div class="flex items-start gap-3.5">
-                        <img :src="row.icon_url" alt="" class="size-12 shrink-0 rounded-xl border border-gray-200 dark:border-gray-800 object-cover">
+                        <img :src="row.icon_url" alt="" onerror="this.onerror = null; this.src = '{{ asset('/resources/default/icon.png') }}'" class="size-12 shrink-0 rounded-xl border border-gray-200 dark:border-gray-800 object-cover">
                         <div class="min-w-0 flex-1">
                             <a :href="'/modpack/view/' + row.id" class="block font-medium text-gray-950 dark:text-white truncate after:absolute after:inset-0 after:rounded-xl" x-text="row.name"></a>
                             <p class="mt-0.5 font-mono text-xs text-gray-500 truncate" x-text="row.slug"></p>

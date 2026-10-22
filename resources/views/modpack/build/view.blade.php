@@ -7,7 +7,7 @@
     <div class="page-header">
         <div class="min-w-0">
             <a href="{{ url('modpack/view/'.$build->modpack->id) }}" class="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-950 dark:hover:text-white">
-                <img src="{{ $build->modpack->icon_url ?? asset('/resources/default/icon.png') }}" alt="" class="size-4 rounded">
+                <img src="{{ $build->modpack->icon_url ?? asset('/resources/default/icon.png') }}" alt="" onerror="this.onerror = null; this.src = '{{ asset('/resources/default/icon.png') }}'" class="size-4 rounded">
                 {{ $build->modpack->name }}
             </a>
             <div class="mt-1 flex items-center gap-3 flex-wrap">

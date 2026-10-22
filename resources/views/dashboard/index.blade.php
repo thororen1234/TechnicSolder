@@ -108,7 +108,7 @@
                 @forelse ($builds as $build)
                     <li>
                         <a href="{{ url('/modpack/build/'.$build->id) }}" class="flex items-center gap-4 px-5 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors group">
-                            <img src="{{ $build->modpack->icon_url ?? asset('/resources/default/icon.png') }}" alt="" class="size-9 shrink-0 rounded-lg border border-gray-200 dark:border-gray-800 object-cover">
+                            <img src="{{ $build->modpack->icon_url ?? asset('/resources/default/icon.png') }}" alt="" onerror="this.onerror = null; this.src = '{{ asset('/resources/default/icon.png') }}'" class="size-9 shrink-0 rounded-lg border border-gray-200 dark:border-gray-800 object-cover">
                             <div class="min-w-0 flex-1">
                                 <p class="text-sm font-medium text-gray-950 dark:text-white truncate">{{ $build->modpack->name }}</p>
                                 <p class="mt-0.5 flex items-center gap-2 text-xs text-gray-500">
