@@ -219,6 +219,18 @@ final class JarMetadataTest extends TestCase
         $this->assertSame('[1.20.1,1.20.2)', $info['mods'][0]['minecraft']);
     }
 
+    public function test_describe_tolerates_malformed_metadata(): void
+    {
+        $info = $this->describe(['fabric.mod.json' => json_encode([
+            'id' => 'odd', 'name' => ['not', 'a', 'string'], 'version' => 3, 'contact' => ['homepage' => ['x']],
+        ])]);
+
+        $this->assertSame('odd', $info['mods'][0]['id']);
+        $this->assertSame('', $info['mods'][0]['name']);
+        $this->assertSame('3', $info['mods'][0]['version']);
+        $this->assertSame('', $info['mods'][0]['url']);
+    }
+
     public function test_describe_legacy_forge_required_mods(): void
     {
         $info = $this->describe(['mcmod.info' => json_encode([[

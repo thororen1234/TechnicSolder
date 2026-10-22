@@ -218,18 +218,22 @@ final class JarMetadata
      * @param  list<string>  $provides
      * @return array{id: string, name: string, version: string, authors: string, description: string, url: string, minecraft: string, depends: list<string>, provides: list<string>}
      */
-    private static function mod(string $id, string $name, string $version, string $authors, string $description, string $url, mixed $minecraft, array $depends, array $provides): array
+    private static function mod(mixed $id, mixed $name, mixed $version, mixed $authors, mixed $description, mixed $url, mixed $minecraft, array $depends, array $provides): array
     {
+        // Metadata comes from untrusted jars, so tolerate any JSON type where a string is expected
+        $text = fn (mixed $value) => is_scalar($value) ? trim((string) $value) : '';
+        $list = fn (array $values) => array_values(array_filter(array_map($text, $values)));
+
         return [
-            'id' => $id,
-            'name' => $name,
-            'version' => $version,
-            'authors' => $authors,
-            'description' => $description,
-            'url' => is_string($url) ? $url : '',
-            'minecraft' => is_array($minecraft) ? implode(' || ', $minecraft) : (string) $minecraft,
-            'depends' => array_values(array_filter(array_map('strval', $depends))),
-            'provides' => array_values(array_filter(array_map('strval', $provides))),
+            'id' => $text($id),
+            'name' => $text($name),
+            'version' => $text($version),
+            'authors' => $text($authors),
+            'description' => $text($description),
+            'url' => $text($url),
+            'minecraft' => is_array($minecraft) ? implode(' || ', $list($minecraft)) : $text($minecraft),
+            'depends' => $list($depends),
+            'provides' => $list($provides),
         ];
     }
 
