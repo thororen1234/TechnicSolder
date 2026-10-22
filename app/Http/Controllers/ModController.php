@@ -210,7 +210,9 @@ class ModController extends Controller
 
         set_time_limit(0);
 
-        $result = $providers[$provider]::install($modId, $versions, $modData);
+        $result = Request::boolean('with_dependencies')
+            ? $providers[$provider]::installWithDependencies($modId, $versions, $modData, (string) Request::input('game_version', ''), (string) Request::input('loader', ''))
+            : $providers[$provider]::install($modId, $versions, $modData);
 
         if (! $result->success) {
             return redirect($detailsUrl)->withErrors($result->errors);
@@ -218,7 +220,8 @@ class ModController extends Controller
 
         $message = trim(
             ($result->created ? "Imported {$result->created} ".Str::plural('version', $result->created).'. ' : '')
-            .($result->existing ? "{$result->existing} ".Str::plural('version', $result->existing).' already existed.' : '')
+            .($result->existing ? "{$result->existing} ".Str::plural('version', $result->existing).' already existed. ' : '')
+            .(! empty($result->dependencies) ? 'Also imported required mods: '.implode(', ', $result->dependencies).'.' : '')
         );
 
         $redirect = redirect('mod/view/'.$result->id);
@@ -253,6 +256,10 @@ class ModController extends Controller
 
         $errors = [];
         $importedCount = 0;
+        $dependencies = [];
+        $withDependencies = Request::boolean('with_dependencies');
+        // Shared across the batch so a library several mods need is only imported once
+        $visited = array_fill_keys(array_map('strval', $modIds), true);
 
         foreach ($modIds as $modId) {
             $modId = (string) $modId;
@@ -275,13 +282,15 @@ class ModController extends Controller
                 continue;
             }
 
-            $result = $providers[$provider]::install($modId, [$version], $modData);
+            $result = $withDependencies
+                ? $providers[$provider]::installWithDependencies($modId, [$version], $modData, $gameVersion, $loader, visited: $visited)
+                : $providers[$provider]::install($modId, [$version], $modData);
 
-            if (! empty($result->errors)) {
-                $errors = array_merge($errors, $result->errors);
-            } else {
+            if (isset($result->modversionIds[$version])) {
                 $importedCount++;
             }
+            $errors = array_merge($errors, $result->errors);
+            $dependencies = array_merge($dependencies, $result->dependencies ?? []);
         }
 
         $redirect = redirect('mod/import?'.http_build_query(array_filter([
@@ -292,7 +301,8 @@ class ModController extends Controller
         ])));
 
         if ($importedCount > 0) {
-            $redirect->with('success', "$importedCount ".Str::plural('mod', $importedCount).' imported successfully.');
+            $redirect->with('success', trim("$importedCount ".Str::plural('mod', $importedCount).' imported successfully. '
+                .($dependencies ? 'Also imported required mods: '.implode(', ', $dependencies).'.' : '')));
         }
 
         return empty($errors) ? $redirect : $redirect->withErrors($errors);

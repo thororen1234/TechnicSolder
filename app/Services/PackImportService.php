@@ -272,7 +272,7 @@ class PackImportService
         $result = $provider::install($modId, [$versionKey], $modData);
 
         if (isset($result->modversionIds[$versionKey])) {
-            $modversionIds[] = $result->modversionIds[$versionKey];
+            $modversionIds[] = (int) $result->modversionIds[$versionKey];
             $this->imported++;
         } else {
             $this->fail(...($result->errors ?: ["{$modData->name}: import failed"]));

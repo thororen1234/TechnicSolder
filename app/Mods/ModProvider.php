@@ -79,7 +79,8 @@ abstract class ModProvider
      *
      * @param  list<string>  $versions  Version keys from ImportedModData::$versions
      * @param  ImportedModData|null  $modData  Pre-loaded mod data; fetched from the provider when null
-     * @return object{success: bool, id: int, errors: list<string>, modversionIds: array<string, int>, created: int, existing: int}
+     * @return \stdClass With success (bool), id (mod ID), errors (list of messages), modversionIds (version key => modversion ID),
+     *                   created and existing (counts) and dependencies (names of required mods also imported)
      */
     public static function install(string $modId, array $versions, ?ImportedModData $modData = null): object
     {
@@ -90,6 +91,7 @@ abstract class ModProvider
             'modversionIds' => [],
             'created' => 0,
             'existing' => 0,
+            'dependencies' => [],
         ];
 
         $modData ??= static::mod($modId);
@@ -134,6 +136,74 @@ abstract class ModProvider
         }
 
         return $response;
+    }
+
+    /**
+     * Import versions of a mod plus the mods they require, picking the newest version of each required mod
+     * for the same Minecraft version and loader. Mods already imported from this provider are skipped.
+     *
+     * @param  list<string>  $versions
+     * @param  array<string, true>  $visited  Projects already handled in this import
+     * @return \stdClass Same fields as install()
+     */
+    public static function installWithDependencies(
+        string $modId,
+        array $versions,
+        ?ImportedModData $modData = null,
+        string $gameVersion = '',
+        string $loader = '',
+        int $depth = 3,
+        array &$visited = [],
+    ): object {
+        $modData ??= static::modFor($modId, $gameVersion, $loader);
+        $visited[(string) $modId] = true;
+
+        $result = static::install($modId, $versions, $modData);
+
+        if ($depth <= 0 || $modData === null) {
+            return $result;
+        }
+
+        foreach (array_keys($result->modversionIds) as $versionKey) {
+            $versionData = $modData->versions[$versionKey] ?? null;
+            $dependencyGame = $gameVersion !== '' ? $gameVersion : static::primaryGameVersion($versionData ?? (object) []);
+            $dependencyLoader = $loader !== '' ? $loader : (string) (((array) ($versionData->loaders ?? []))[0] ?? '');
+
+            foreach ((array) ($versionData->dependencies ?? []) as $dependencyId) {
+                $dependencyId = (string) $dependencyId;
+                if (isset($visited[$dependencyId])) {
+                    continue;
+                }
+                $visited[$dependencyId] = true;
+
+                $alreadyImported = Modversion::where('provider', static::key())->where('provider_project_id', $dependencyId)->exists();
+                if ($alreadyImported) {
+                    continue;
+                }
+
+                $dependencyData = static::modFor($dependencyId, $dependencyGame, $dependencyLoader);
+                $dependencyVersion = $dependencyData
+                    ? static::latestStableVersionForGame($dependencyData->versions, $dependencyGame, '', $dependencyLoader)
+                    : null;
+
+                if ($dependencyVersion === null) {
+                    $result->errors[] = "{$modData->name} requires ".($dependencyData->name ?? $dependencyId).', but no version for '
+                        .trim("$dependencyGame $dependencyLoader").' was found. Add it by hand.';
+
+                    continue;
+                }
+
+                $dependency = static::installWithDependencies($dependencyId, [$dependencyVersion], $dependencyData, $dependencyGame, $dependencyLoader, $depth - 1, $visited);
+
+                if (isset($dependency->modversionIds[$dependencyVersion])) {
+                    $result->dependencies[] = $dependencyData->name.' '.($dependencyData->versions[$dependencyVersion]->label ?? $dependencyVersion);
+                }
+                array_push($result->dependencies, ...$dependency->dependencies);
+                array_push($result->errors, ...$dependency->errors);
+            }
+        }
+
+        return $result;
     }
 
     /**

@@ -176,6 +176,9 @@ class Modrinth extends ModProvider
             'loaders' => $version->loaders ?? [],
             'versionType' => $version->version_type ?? 'release',
             'sha1' => $primaryFile->hashes->sha1 ?? null,
+            'dependencies' => collect($version->dependencies ?? [])
+                ->filter(fn ($dependency) => ($dependency->dependency_type ?? '') === 'required' && ! empty($dependency->project_id))
+                ->pluck('project_id')->unique()->values()->all(),
         ];
     }
 

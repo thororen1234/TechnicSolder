@@ -62,6 +62,12 @@
                 </div>
                 <div class="flex items-center gap-3">
                     <span class="text-xs text-gray-500" x-text="selected.length ? selected.length + ' selected' : 'Select versions to import'"></span>
+                    @if (in_array($provider, ['modrinth', 'curseforge']))
+                        <label class="flex items-center gap-1.5 text-xs text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                            <input type="checkbox" name="with_dependencies" value="1" checked class="ui-checkbox">
+                            Also import required mods
+                        </label>
+                    @endif
                     <button type="submit" class="ui-btn ui-btn-primary-solid" :disabled="!selected.length || submitting"
                             x-text="submitting ? 'Importing…' : 'Import'">Import</button>
                 </div>

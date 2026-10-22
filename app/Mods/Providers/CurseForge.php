@@ -217,6 +217,10 @@ class CurseForge extends ModProvider
             },
             'folder' => $folder,
             'sha1' => $sha1,
+            // relationType 3 = required dependency
+            'dependencies' => collect($file->dependencies ?? [])
+                ->filter(fn ($dependency) => ($dependency->relationType ?? 0) === 3)
+                ->map(fn ($dependency) => (string) $dependency->modId)->unique()->values()->all(),
         ];
     }
 

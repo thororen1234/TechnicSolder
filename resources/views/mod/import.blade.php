@@ -117,6 +117,12 @@
                         Imports the newest {{ $releaseType !== 'any' ? $releaseType : '' }}
                         version{{ ! $isLoaderProvider && $gameVersion !== '' ? ' for '.$gameVersion : '' }}
                     </span>
+                    @unless ($isLoaderProvider)
+                        <label class="flex items-center gap-1.5 text-xs text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                            <input type="checkbox" name="with_dependencies" value="1" checked class="ui-checkbox">
+                            Also import required mods
+                        </label>
+                    @endunless
                     <button type="submit" class="ui-btn ui-btn-sm ui-btn-primary-solid" :disabled="submitting">
                         <span x-text="submitting ? 'Importing…' : 'Import ' + selected.length + ' selected'"></span>
                     </button>
