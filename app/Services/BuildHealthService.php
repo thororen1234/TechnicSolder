@@ -49,14 +49,14 @@ class BuildHealthService
 
         foreach ($build->modversions as $modversion) {
             $label = $modversion->mod->pretty_name ?: $modversion->mod->name;
-            $info = Cache::rememberForever("solder-jarinfo:v1:{$modversion->id}:{$modversion->md5}", function () use ($repository, $modversion) {
+            $info = Cache::rememberForever("solder-jarinfo:v2:{$modversion->id}:{$modversion->md5}", function () use ($repository, $modversion) {
                 $copy = $repository->localCopy($modversion);
 
                 return isset($copy['error']) ? ['error' => $copy['error']] : ['jars' => $this->readModversion($copy['path'])];
             });
 
             if (isset($info['error'])) {
-                Cache::forget("solder-jarinfo:v1:{$modversion->id}:{$modversion->md5}");
+                Cache::forget("solder-jarinfo:v2:{$modversion->id}:{$modversion->md5}");
                 $issues[] = $this->issue('error', $label, "{$modversion->version}: {$info['error']}");
 
                 continue;

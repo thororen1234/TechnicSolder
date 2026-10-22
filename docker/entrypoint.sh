@@ -31,4 +31,16 @@ chgrp -R www-data storage bootstrap/cache
 find storage bootstrap/cache -type d -exec chmod 775 {} \;
 find storage bootstrap/cache -type f -exec chmod 664 {} \;
 
-exec php-fpm
+# Serve the app with nginx on port 80. PHP-FPM also listens on 9000 for setups with their own web server.
+# If either stops, stop the other and exit so the container is restarted.
+php-fpm &
+nginx -g 'daemon off;' &
+# Pass stop signals on; the base image stops containers with SIGQUIT, which both shut down gracefully on
+for signal in TERM INT QUIT; do
+    trap "kill -$signal \$(jobs -p) 2>/dev/null" "$signal"
+done
+status=0
+wait -n || status=$?
+kill -TERM $(jobs -p) 2>/dev/null || true
+wait
+exit $status

@@ -98,6 +98,15 @@ return [
     'discord_webhook' => env('SOLDER_DISCORD_WEBHOOK'),
 
     /**
+     * Discord Direct Messages
+     *
+     * Send the same notices as direct messages instead of (or as well as) the webhook. Needs the token of a
+     * Discord bot that shares a server with each user, and their user IDs (comma-separated for several).
+     */
+    'discord_bot_token' => env('SOLDER_DISCORD_BOT_TOKEN'),
+    'discord_user_id' => env('SOLDER_DISCORD_USER_ID'),
+
+    /**
      * Nightly Update Checks
      *
      * Check the latest build of every modpack for mod updates each night (needs the scheduler running).

@@ -7,9 +7,7 @@
 @section('content')
     <div class="page-header">
         <div class="flex items-center gap-4 min-w-0">
-            @if (! empty($mod->thumbnailUrl))
-                <img src="{{ $mod->thumbnailUrl }}" alt="" class="size-14 shrink-0 rounded-2xl border border-gray-200 dark:border-gray-800 object-contain bg-white dark:bg-gray-900">
-            @endif
+            <x-mod-icon :url="$mod->thumbnailUrl" :name="$mod->displayName ?? $mod->name" class="size-14 rounded-2xl text-xl" />
             <div class="min-w-0">
                 <h1 class="page-title truncate">{{ $mod->displayName ?? $mod->name }}</h1>
                 <p class="page-subtitle line-clamp-2">{{ $mod->displaySummary ?? $mod->summary }}</p>

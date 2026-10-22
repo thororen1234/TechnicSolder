@@ -144,4 +144,14 @@ final class BuildHealthTest extends TestCase
 
         $this->assertSame([], $this->messages());
     }
+
+    public function test_neoforge_mods_with_the_old_mods_toml_name_are_not_reported_as_forge(): void
+    {
+        $this->build->update(['minecraft' => '1.20.4']);
+        $toml = "[[mods]]\nmodId=\"starlight\"\nversion=\"1.1.3\"\n[[dependencies.starlight]]\nmodId=\"neoforge\"\nrequired=true\n";
+        $this->add('neoforge', 'neoforge-20.4.237', ['bin/modpack.jar' => 'jar']);
+        $this->add('starlight', '1.1.3', ['mods/starlight.jar' => $this->makeArchive(['META-INF/mods.toml' => $toml])]);
+
+        $this->assertSame([], $this->messages());
+    }
 }

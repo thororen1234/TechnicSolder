@@ -106,13 +106,13 @@ final class JarMetadata
             }
         }
 
-        foreach (['META-INF/neoforge.mods.toml' => 'neoforge', 'META-INF/mods.toml' => 'forge'] as $file => $loader) {
+        foreach (['META-INF/neoforge.mods.toml' => 'neoforge', 'META-INF/mods.toml' => null] as $file => $loader) {
             $toml = $zip->getFromName($file);
             if ($toml === false) {
                 continue;
             }
 
-            $info['loaders'][] = $loader;
+            $info['loaders'][] = $loader ?? self::modsTomlLoader($toml);
             foreach (self::tomlMods($toml, $zip) as $mod) {
                 $info['mods'][] = $mod;
             }
@@ -150,6 +150,15 @@ final class JarMetadata
     }
 
     /**
+     * The loader a META-INF/mods.toml is for. NeoForge kept that file name until Minecraft 1.20.5,
+     * so a mods.toml whose mods depend on "neoforge" is a NeoForge mod.
+     */
+    private static function modsTomlLoader(string $toml): string
+    {
+        return preg_match('/^\s*modId\s*=\s*["\']neoforge["\']/m', $toml) ? 'neoforge' : 'forge';
+    }
+
+    /**
      * Mods declared in a Forge/NeoForge mods.toml, with their mandatory dependencies.
      *
      * @return list<array{id: string, name: string, version: string, authors: string, description: string, url: string, minecraft: string, depends: list<string>, provides: list<string>}>
@@ -162,7 +171,7 @@ final class JarMetadata
         $dependencies = [];
         if (preg_match_all('/\[\[dependencies\.([^\]]+)\]\](.*?)(?=\[\[|\z)/s', $toml, $blocks, PREG_SET_ORDER)) {
             foreach ($blocks as [, $owner, $block]) {
-                $required = preg_match('/^\s*mandatory\s*=\s*true/m', $block)
+                $required = preg_match('/^\s*(mandatory|required)\s*=\s*true/m', $block)
                     || preg_match('/^\s*type\s*=\s*["\']required["\']/mi', $block);
                 $dependencies[trim($owner, '"\' ')][] = [
                     'id' => $string($block, 'modId'),

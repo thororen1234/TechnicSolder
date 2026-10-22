@@ -9,10 +9,12 @@ use App\Models\Modversion;
 use App\Models\User;
 use App\Models\UserPermission;
 use App\Services\BuildUpdateService;
+use App\Services\DiscordNotifier;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use Tests\FakesModProviders;
 use Tests\TestCase;
 
@@ -145,6 +147,55 @@ final class NotificationTest extends TestCase
         $this->assertSame(['Test message from Technic Solder'], $this->discordMessages());
 
         config(['solder.discord_webhook' => null]);
+        $this->post('/solder/notifications/test')->assertSessionHasErrors();
+    }
+
+    public function test_bot_direct_messages_each_user_and_reuses_the_channel(): void
+    {
+        config(['solder.discord_webhook' => null, 'solder.discord_bot_token' => 'bot-token', 'solder.discord_user_id' => '111, 222']);
+        Http::fake([
+            'discord.com/api/v10/users/@me/channels' => fn (Request $request) => Http::response(['id' => 'dm-'.$request['recipient_id']]),
+            'discord.com/api/v10/channels/*/messages' => Http::response(['id' => 'message']),
+        ]);
+
+        $this->assertTrue(DiscordNotifier::send('First', 'Hello'));
+        $this->assertTrue(DiscordNotifier::send('Second', 'Again'));
+
+        $sent = Http::recorded()->map(fn ($pair) => $pair[0]);
+        $this->assertSame(
+            ['users/@me/channels', 'channels/dm-111/messages', 'users/@me/channels', 'channels/dm-222/messages', 'channels/dm-111/messages', 'channels/dm-222/messages'],
+            $sent->map(fn (Request $request) => Str::after($request->url(), 'api/v10/'))->all(),
+        );
+        $this->assertTrue($sent->every(fn (Request $request) => $request->header('Authorization') === ['Bot bot-token']));
+        $this->assertSame('Second', $sent->last()['embeds'][0]['title']);
+    }
+
+    public function test_failed_direct_message_is_reported_and_reopens_the_channel(): void
+    {
+        config(['solder.discord_webhook' => self::WEBHOOK, 'solder.discord_bot_token' => 'bot-token', 'solder.discord_user_id' => '111']);
+        Cache::forever('solder-discord-dm-channel:111', 'stale');
+        Http::fake([
+            'discord.test/*' => Http::response(null, 204),
+            'discord.com/api/v10/channels/stale/messages' => Http::response(['message' => 'Unknown Channel'], 404),
+        ]);
+
+        $this->assertFalse(DiscordNotifier::send('Title', 'Body'));
+        $this->assertSame(['Title'], $this->discordMessages());
+        $this->assertNull(Cache::get('solder-discord-dm-channel:111'));
+    }
+
+    public function test_test_message_button_works_with_direct_messages_only(): void
+    {
+        config(['solder.discord_webhook' => null, 'solder.discord_bot_token' => 'bot-token', 'solder.discord_user_id' => '111']);
+        Http::fake([
+            'discord.com/api/v10/users/@me/channels' => Http::response(['id' => 'dm-111']),
+            'discord.com/api/v10/channels/*/messages' => Http::response(['id' => 'message']),
+        ]);
+
+        $this->post('/solder/notifications/test')->assertSessionHas('success', 'Test message sent to Discord.');
+        $this->get('/solder/configure')->assertSee('Discord direct messages configured');
+
+        config(['solder.discord_user_id' => '']);
         $this->post('/solder/notifications/test')->assertSessionHasErrors();
     }
 

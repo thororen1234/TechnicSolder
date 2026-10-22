@@ -6,7 +6,7 @@
     <div class="page-header">
         <div>
             <h1 class="page-title">Import modpack</h1>
-            <p class="page-subtitle">Create a modpack from a CurseForge or Modrinth pack, or restore a Solder backup.</p>
+            <p class="page-subtitle">Create a modpack from a CurseForge or Modrinth pack, add a pack's version as a build of an existing modpack, or restore a Solder backup.</p>
         </div>
     </div>
 
@@ -14,6 +14,7 @@
         <form action="{{ route('modpack.import') }}" method="POST" enctype="multipart/form-data"
               class="ui-card lg:col-span-2"
               x-data="{
+                  target: @js(old('target', request('modpack') || ! $canCreate ? 'existing' : 'new')),
                   source: @js(old('source', 'file')),
                   name: @js(old('name', '')),
                   slug: @js(old('slug', '')),
@@ -26,7 +27,46 @@
             <div class="p-5 sm:p-6 space-y-5">
                 @include('partial.form-errors')
 
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <span class="ui-label">Import into</span>
+                    <div class="inline-flex p-0.5 rounded-lg bg-gray-100 dark:bg-gray-900 text-sm" role="radiogroup">
+                        @if ($canCreate)
+                            <label class="px-3 py-1.5 rounded-md cursor-pointer transition-colors"
+                                   :class="target === 'new' ? 'bg-white dark:bg-gray-800 text-gray-950 dark:text-white shadow-xs' : 'text-gray-500'">
+                                <input type="radio" name="target" value="new" x-model="target" class="sr-only">
+                                New modpack
+                            </label>
+                        @endif
+                        <label class="px-3 py-1.5 rounded-md cursor-pointer transition-colors"
+                               :class="target === 'existing' ? 'bg-white dark:bg-gray-800 text-gray-950 dark:text-white shadow-xs' : 'text-gray-500'">
+                            <input type="radio" name="target" value="existing" x-model="target" class="sr-only">
+                            Existing modpack
+                        </label>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4" x-show="target === 'existing'" x-cloak>
+                    <div>
+                        <label for="modpack_id" class="ui-label">Modpack</label>
+                        <select name="modpack_id" id="modpack_id" class="ui-control">
+                            <option value="">Choose a modpack…</option>
+                            @foreach ($modpacks as $modpack)
+                                <option value="{{ $modpack->id }}" @selected((string) old('modpack_id', request('modpack')) === (string) $modpack->id)>{{ $modpack->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div>
+                        <label for="build_version" class="ui-label">Build version <span class="font-normal text-gray-500">(optional)</span></label>
+                        <input type="text" name="build_version" id="build_version" value="{{ old('build_version') }}"
+                               placeholder="The pack's version" class="ui-control font-mono">
+                    </div>
+                    <p class="sm:col-span-2 -mt-2 text-xs text-gray-500">
+                        The pack becomes a new build of this modpack. If the modpack already has a build with that version,
+                        you'll be asked whether to overwrite it, import it under another version or cancel.
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4" x-show="target === 'new'">
                     <div>
                         <label for="name" class="ui-label">Modpack name</label>
                         <input type="text" name="name" id="name" x-model="name"
@@ -89,9 +129,35 @@
                     <li>Every mod is downloaded into your mod library and linked to a new build.</li>
                     <li>The pack's mod loader (Forge, NeoForge, Fabric or Quilt) is added to the build.</li>
                     <li>Configs and other bundled files are kept as a <span class="font-mono text-xs">…-overrides</span> mod.</li>
-                    <li>The new modpack starts hidden so you can review it first.</li>
+                    <li>The new modpack starts hidden so you can review it first; builds added to an existing modpack start unpublished.</li>
+                    <li>Every import keeps a report of what was added and what failed.</li>
                 </ul>
             </div>
+            @if ($recentImports->isNotEmpty())
+                <div class="ui-card overflow-hidden">
+                    <div class="ui-card-header">
+                        <h2 class="section-title">Recent imports</h2>
+                    </div>
+                    <ul class="divide-y divide-gray-100 dark:divide-gray-900">
+                        @foreach ($recentImports as $recentImport)
+                            <li>
+                                <a href="{{ route('modpack.import.show', $recentImport->id) }}" class="flex items-center justify-between gap-3 px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-900/50">
+                                    <span class="min-w-0">
+                                        <span class="block truncate font-medium text-gray-950 dark:text-white">
+                                            {{ $recentImport->name }}
+                                            @if ($recentImport->build_version)
+                                                <span class="font-mono text-xs text-gray-500">{{ $recentImport->build_version }}</span>
+                                            @endif
+                                        </span>
+                                        <span class="block text-xs text-gray-500">{{ $recentImport->created_at->diffForHumans() }}</span>
+                                    </span>
+                                    <x-import-status :import="$recentImport" />
+                                </a>
+                            </li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
             <div class="ui-card p-5">
                 <h2 class="section-title">CurseForge packs</h2>
                 <p class="mt-2 text-gray-600 dark:text-gray-400">

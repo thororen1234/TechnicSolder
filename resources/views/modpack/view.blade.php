@@ -23,6 +23,8 @@
             <div class="flex items-center gap-2 shrink-0">
                 <a href="{{ route('modpack.export', ['modpack_id' => $modpack->id]) }}" class="ui-btn ui-btn-secondary"
                    title="Download a JSON backup of this modpack and all its builds, for restoring with Import">Back up</a>
+                <a href="{{ route('modpack.import', ['modpack' => $modpack->id]) }}" class="ui-btn ui-btn-secondary"
+                   title="Add a CurseForge or Modrinth pack as a build of this modpack">Import build</a>
                 <a href="{{ url('modpack/edit/'.$modpack->id) }}" class="ui-btn ui-btn-secondary">Edit</a>
                 @can('create', App\Models\Modpack::class)
                     <a href="{{ url('modpack/clone/'.$modpack->id) }}" class="ui-btn ui-btn-secondary">Clone</a>
@@ -191,6 +193,32 @@
                 @include('partial.data-table.pagination')
             </div>
         </section>
+
+        @if ($imports->isNotEmpty())
+            <section class="ui-card overflow-hidden mt-6">
+                <div class="ui-card-header">
+                    <h2 class="section-title">Imports</h2>
+                </div>
+                <ul class="divide-y divide-gray-100 dark:divide-gray-900">
+                    @foreach ($imports as $import)
+                        <li>
+                            <a href="{{ route('modpack.import.show', $import->id) }}" class="flex items-center justify-between gap-3 px-5 py-3 text-sm hover:bg-gray-50 dark:hover:bg-gray-900/50">
+                                <span class="min-w-0">
+                                    <span class="block truncate text-gray-950 dark:text-white">
+                                        <span class="font-mono">{{ $import->build?->version ?? $import->build_version ?? '-' }}</span>
+                                        <span class="text-gray-500">from {{ $import->source }}</span>
+                                    </span>
+                                    <span class="block text-xs text-gray-500">
+                                        {{ $import->imported }} mod(s) imported · <time datetime="{{ $import->created_at->toIso8601String() }}">{{ $import->created_at->diffForHumans() }}</time>
+                                    </span>
+                                </span>
+                                <x-import-status :import="$import" />
+                            </a>
+                        </li>
+                    @endforeach
+                </ul>
+            </section>
+        @endif
 
         <section class="ui-card overflow-hidden mt-6">
             <div class="ui-card-header flex items-center justify-between">

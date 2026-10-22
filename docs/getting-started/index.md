@@ -192,7 +192,9 @@ Solder also checks every modpack's latest build for mod updates each night. Add 
 * * * * * cd /path/to/TechnicSolder && php artisan schedule:run >> /dev/null 2>&1
 ```
 
-Set `SOLDER_DISCORD_WEBHOOK` to post the results (and finished imports, published builds and repository problems) to Discord.
+Set `SOLDER_DISCORD_WEBHOOK` to post the results (and finished imports, published builds and repository problems) to a Discord channel.
+
+To get them as direct messages instead, create an application in the [Discord Developer Portal](https://discord.com/developers/applications), copy its bot token into `SOLDER_DISCORD_BOT_TOKEN` and add the bot to a server you're in (Discord only lets bots message users they share a server with). Then turn on Developer Mode in Discord, right-click your name, choose **Copy User ID** and put it in `SOLDER_DISCORD_USER_ID`. Separate several IDs with commas. Use **Send test message** under Settings to check it works.
 
 ## Optimize
 

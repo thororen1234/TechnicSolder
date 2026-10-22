@@ -32,6 +32,8 @@ class TaskController extends Controller
             'url' => $task['result']['url'] ?? (isset($task['result']['path']) ? route('task.download', $taskId) : null),
             'label' => $task['result']['label'] ?? null,
             'download' => isset($task['result']['path']),
+            'redirect' => ! empty($task['result']['redirect']),
+            'report_url' => $task['result']['report_url'] ?? null,
         ]);
     }
 

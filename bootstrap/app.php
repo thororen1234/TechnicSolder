@@ -4,6 +4,7 @@ use App\Http\Middleware\Cors;
 use App\Http\Middleware\ForceJsonResponse;
 use App\Http\Middleware\RequireMail;
 use App\Http\Middleware\SecurityHeaders;
+use App\Models\ModpackImport;
 use App\Providers\AppServiceProvider;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
@@ -22,6 +23,8 @@ return Application::configure(basePath: dirname(__DIR__))
         if (config('solder.scheduled_update_checks')) {
             $schedule->command('solder:check-updates')->dailyAt('04:00')->withoutOverlapping();
         }
+
+        $schedule->call(fn () => ModpackImport::cancelAbandoned())->daily()->name('cancel-abandoned-imports');
     })
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->trustProxies(at: '*');

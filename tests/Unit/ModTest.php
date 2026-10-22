@@ -480,6 +480,24 @@ final class ModTest extends TestCase
         $response->assertSee('Fabric Loader 1.18.2');
     }
 
+    public function test_mod_import_search_falls_back_to_an_initial_without_an_icon()
+    {
+        $this->setUpModRepository();
+        Http::fake([
+            'api.modrinth.com/v2/search*' => Http::response(['total_hits' => 2, 'hits' => [
+                ['project_id' => 'a1', 'slug' => 'sodium', 'title' => 'Sodium', 'icon_url' => 'https://cdn.modrinth.com/sodium.png'],
+                ['project_id' => 'b2', 'slug' => 'iris', 'title' => 'iris shaders', 'icon_url' => null],
+            ]]),
+        ]);
+
+        $response = $this->get('/mod/import/modrinth/shaders');
+
+        $response->assertOk();
+        $response->assertSee('src="https://cdn.modrinth.com/sodium.png"', false);
+        $response->assertSee('aria-hidden="true">I</span>', false);
+        $response->assertSee('onerror="this.hidden = true; this.previousElementSibling.hidden = false"', false);
+    }
+
     public function test_mod_import_details_get()
     {
         $this->fakeModImportProviders();

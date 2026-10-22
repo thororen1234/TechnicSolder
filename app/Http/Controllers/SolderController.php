@@ -29,14 +29,14 @@ class SolderController extends Controller
     public function postTestNotification(): RedirectResponse
     {
         if (! DiscordNotifier::isConfigured()) {
-            return redirect('solder/configure')->withErrors(['Set SOLDER_DISCORD_WEBHOOK in your .env file first.']);
+            return redirect('solder/configure')->withErrors(['Set SOLDER_DISCORD_WEBHOOK, or SOLDER_DISCORD_BOT_TOKEN and SOLDER_DISCORD_USER_ID, in your .env file first.']);
         }
 
         $sent = DiscordNotifier::send('Test message from Technic Solder', 'Notifications are working.', url('dashboard'), DiscordNotifier::SUCCESS);
 
         return $sent
             ? redirect('solder/configure')->with('success', 'Test message sent to Discord.')
-            : redirect('solder/configure')->withErrors(['Discord did not accept the message. Check the webhook URL; details are in the log.']);
+            : redirect('solder/configure')->withErrors(['Discord did not accept the message. Check the webhook URL, bot token and user IDs, and that the bot shares a server with each user; details are in the log.']);
     }
 
     /**

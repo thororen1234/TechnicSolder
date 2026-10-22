@@ -27,7 +27,7 @@ That's it. The first boot takes a minute or two while the image builds and the s
     4. Creates the initial admin user
     5. Warns if frontend assets are missing (assets are built into the Docker image at build time)
     6. Sets file permissions
-    7. Starts PHP-FPM
+    7. Starts PHP-FPM (port 9000) and the image's built-in nginx (port 80)
 
     Subsequent boots skip the steps that have already been completed, so restarts are fast.
 
@@ -215,3 +215,32 @@ The default Docker setup serves Solder over HTTP on the configured `SOLDER_PORT`
 
 !!! tip
     If your reverse proxy terminates TLS, make sure it passes the `X-Forwarded-Proto` header so Solder knows the original request was HTTPS.
+
+## Running the Image on Its Own (Kubernetes)
+
+The Solder image includes nginx, so a single container serves the whole app on port **80**; you don't need a separate web server. PHP-FPM still listens on port 9000 if you'd rather put your own web server in front (as the Compose stack does).
+
+To also serve the mod repository from the same container, mount an extra nginx server block into `/etc/nginx/conf.d/`. Requests for other hosts still go to Solder:
+
+```nginx
+server {
+    listen 80;
+    server_name mods.example.com;
+    root /var/www/mods.example.com;
+    autoindex on;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+}
+```
+
+Run the queue worker and scheduler as extra containers from the same image, with the same environment, the mod repository volume, and a volume for `storage/app/private` shared with the web container (uploaded imports and finished exports are passed between them there):
+
+| Container | Command | User |
+|-----------|---------|------|
+| web | `/bin/bash /var/www/html/docker/entrypoint.sh` | root (it fixes permissions, then nginx and PHP-FPM drop to `www-data`) |
+| worker | `php /var/www/html/artisan queue:work --tries=1 --timeout=3600 --sleep=2` | `www-data` (33) |
+| scheduler | `php /var/www/html/artisan schedule:work` | `www-data` (33) |
+
+`GET /up` returns 200 once the app is running, for readiness and liveness probes. Migrations run before nginx starts, so allow a few minutes on startup.

@@ -15,6 +15,7 @@ use App\Models\BuildDownload;
 use App\Models\Client;
 use App\Models\Mod;
 use App\Models\Modpack;
+use App\Models\ModpackImport;
 use App\Models\Modversion;
 use App\Services\BuildHealthService;
 use App\Services\BuildUpdateService;
@@ -76,7 +77,8 @@ class ModpackController extends Controller
         return view('modpack.view')
             ->with('modpack', $modpack)
             ->with('launches', BuildDownload::totals($modpack->builds->pluck('id')->all()))
-            ->with('activity', ActivityLog::with('user', 'build')->where('modpack_id', $modpack->id)->latest('id')->limit(15)->get());
+            ->with('activity', ActivityLog::with('user', 'build')->where('modpack_id', $modpack->id)->latest('id')->limit(15)->get())
+            ->with('imports', ModpackImport::with('build')->where('modpack_id', $modpack->id)->latest('id')->limit(10)->get());
     }
 
     public function getBuild($build_id = null)
@@ -584,22 +586,45 @@ class ModpackController extends Controller
 
     public function getImportModpack(): View
     {
-        $this->authorize('create', Modpack::class);
+        $this->authorize('import', Modpack::class);
 
-        return view('modpack.import');
+        $user = Auth::user();
+        $modpacks = Modpack::orderBy('name')->get(['id', 'name', 'slug'])
+            ->filter(fn (Modpack $modpack) => $user->can('update', $modpack))
+            ->values();
+        $recentImports = ModpackImport::with('modpack')->latest('id')->limit(50)->get()
+            ->filter(fn (ModpackImport $import) => $user->can('view', $import))
+            ->take(10);
+
+        return view('modpack.import')
+            ->with('modpacks', $modpacks)
+            ->with('canCreate', $user->can('create', Modpack::class))
+            ->with('recentImports', $recentImports);
     }
 
     public function postImportModpack(): RedirectResponse
     {
-        $this->authorize('create', Modpack::class);
+        $this->authorize('import', Modpack::class);
 
         $source = Request::input('source');
+        $intoExisting = Request::input('target') === 'existing';
+
+        if (! $intoExisting) {
+            $this->authorize('create', Modpack::class);
+        }
 
         $rules = [
-            'name' => 'required',
-            'slug' => 'required|unique:modpacks|alpha_dash',
             'source' => 'required|in:file,url',
+            'target' => 'nullable|in:new,existing',
         ];
+
+        if ($intoExisting) {
+            $rules['modpack_id'] = 'required|integer|exists:modpacks,id';
+            $rules['build_version'] = 'nullable|string|max:255';
+        } else {
+            $rules['name'] = 'required';
+            $rules['slug'] = 'required|unique:modpacks|alpha_dash';
+        }
 
         if ($source === 'file') {
             $rules['file'] = 'required|file';
@@ -607,29 +632,118 @@ class ModpackController extends Controller
             $rules['url'] = 'required|url';
         }
 
-        $validation = Validator::make(Request::all(), $rules);
+        $validation = Validator::make(Request::all(), $rules, [], ['modpack_id' => 'modpack']);
         if ($validation->fails()) {
             return redirect('modpack/import')->withErrors($validation->messages())->withInput();
         }
 
-        $name = Request::input('name');
-        $slug = Str::slug(Request::input('slug'));
-
-        $path = null;
-        if ($source === 'file') {
-            $stored = Request::file('file')->storeAs('imports', Str::uuid().'.'.Request::file('file')->getClientOriginalExtension(), 'local');
-            $path = Storage::disk('local')->path($stored);
+        $modpack = $intoExisting ? Modpack::find(Request::input('modpack_id')) : null;
+        if ($modpack !== null) {
+            $this->authorize('update', $modpack);
         }
 
-        $taskId = TaskTracker::create(Auth::id(), "Importing $name");
-        $this->runTask(new ImportModpack($taskId, Auth::id(), $name, $slug, $path, $source === 'url' ? Request::input('url') : null));
+        $archivePath = null;
+        if ($source === 'file') {
+            $file = Request::file('file');
+            $archivePath = $file->storeAs('imports', Str::uuid().'.'.$file->getClientOriginalExtension(), 'local');
+        }
 
-        // Without a queue worker the import has already finished
+        $import = ModpackImport::create([
+            'user_id' => Auth::id(),
+            'modpack_id' => $modpack?->id,
+            'name' => $modpack->name ?? Request::input('name'),
+            'slug' => $modpack === null ? Str::slug(Request::input('slug')) : null,
+            'source' => $source === 'file' ? Request::file('file')->getClientOriginalName() : Request::input('url'),
+            'archive_path' => $archivePath,
+            'build_version' => $modpack !== null ? (trim((string) Request::input('build_version')) ?: null) : null,
+            'status' => ModpackImport::QUEUED,
+        ]);
+
+        return $this->startImport($import, redirect('modpack/import')->withInput());
+    }
+
+    public function getImportReport($import_id): View|RedirectResponse
+    {
+        $import = ModpackImport::with('user', 'modpack', 'build')->find($import_id);
+
+        if ($import === null) {
+            return redirect('modpack/import')->withErrors(['Import not found']);
+        }
+
+        $this->authorize('view', $import);
+
+        return view('modpack.import_report')->with('import', $import);
+    }
+
+    /**
+     * Decide what happens to an import waiting because its build version already exists.
+     */
+    public function postImportReport($import_id): RedirectResponse
+    {
+        $import = ModpackImport::find($import_id);
+
+        if ($import === null) {
+            return redirect('modpack/import')->withErrors(['Import not found']);
+        }
+
+        $this->authorize('update', $import);
+        $report = redirect()->route('modpack.import.show', $import->id);
+
+        if ($import->status !== ModpackImport::WAITING) {
+            return $report->withErrors(['This import is no longer waiting for a decision.']);
+        }
+
+        $validation = Validator::make(Request::all(), [
+            'action' => 'required|in:overwrite,rename,cancel',
+            'version' => [
+                'required_if:action,rename', 'nullable', 'string', 'max:255',
+                Rule::unique('builds')->where('modpack_id', $import->modpack_id),
+            ],
+        ], ['version.unique' => 'This modpack already has a build :input too.']);
+        if ($validation->fails()) {
+            return $report->withErrors($validation->messages())->withInput();
+        }
+
+        $username = Auth::user()->username;
+
+        if (Request::input('action') === 'cancel') {
+            $import->deleteArchive();
+            $import->update(['status' => ModpackImport::CANCELLED]);
+            $import->addLogEntry('info', "Cancelled by $username.");
+
+            return $report->with('success', 'Import cancelled. Nothing was changed.');
+        }
+
+        if (Request::input('action') === 'overwrite') {
+            $import->update(['overwrite' => true, 'status' => ModpackImport::QUEUED, 'problems' => []]);
+            $import->addLogEntry('info', "$username chose to overwrite build {$import->build_version}.");
+        } else {
+            $version = trim(Request::input('version'));
+            $import->update(['build_version' => $version, 'overwrite' => false, 'status' => ModpackImport::QUEUED, 'problems' => []]);
+            $import->addLogEntry('info', "$username chose to import it as build $version instead.");
+        }
+
+        return $this->startImport($import, $report);
+    }
+
+    /**
+     * Queue an import and follow it on a task page, or, when there's no queue worker and it has already
+     * finished, go straight to the result.
+     */
+    private function startImport(ModpackImport $import, RedirectResponse $onFailure): RedirectResponse
+    {
+        $taskId = TaskTracker::create(Auth::id(), "Importing {$import->name}");
+        $this->runTask(new ImportModpack($taskId, $import->id));
+
         $task = TaskTracker::get($taskId);
         if ($task['status'] === 'failed') {
-            return redirect('modpack/import')->withErrors($task['errors'])->withInput();
+            return $onFailure->withErrors($task['errors']);
         }
         if ($task['status'] === 'completed') {
+            if (! empty($task['result']['redirect'])) {
+                return redirect($task['result']['url']);
+            }
+
             $redirect = redirect($task['result']['url'])->with('success', $task['result']['message']);
 
             return empty($task['errors']) ? $redirect : $redirect->withErrors($task['errors']);

@@ -219,6 +219,33 @@ final class JarMetadataTest extends TestCase
         $this->assertSame('[1.20.1,1.20.2)', $info['mods'][0]['minecraft']);
     }
 
+    public function test_describe_neoforge_mod_using_the_old_mods_toml_name(): void
+    {
+        // From starlight-1.1.3+neoforge.2e9f705.jar: NeoForge for 1.20.2-1.20.4 still read META-INF/mods.toml
+        $toml = <<<'TOML'
+        modLoader = "javafml"
+        loaderVersion = "[1,)"
+        [[mods]]
+         modId = "starlight"
+         version = "1.1.3+neoforge.2e9f705"
+         displayName = "Starlight"
+         [[dependencies.starlight]]
+          modId = "neoforge"
+          required = true
+          versionRange = "[20.4,)"
+        [[dependencies.starlight]]
+          modId = "minecraft"
+          required = true
+          versionRange = "[1.20.4,1.20.5)"
+        TOML;
+
+        $info = $this->describe(['META-INF/mods.toml' => $toml]);
+
+        $this->assertSame(['neoforge'], $info['loaders']);
+        $this->assertSame(['neoforge', 'minecraft'], $info['mods'][0]['depends']);
+        $this->assertSame('[1.20.4,1.20.5)', $info['mods'][0]['minecraft']);
+    }
+
     public function test_describe_tolerates_malformed_metadata(): void
     {
         $info = $this->describe(['fabric.mod.json' => json_encode([

@@ -100,11 +100,21 @@
                 <div>
                     <p class="flex items-center gap-2 font-medium text-gray-950 dark:text-white">
                         <span class="size-2 rounded-full {{ App\Services\DiscordNotifier::isConfigured() ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-700' }}"></span>
-                        Discord webhook {{ App\Services\DiscordNotifier::isConfigured() ? 'configured' : 'not configured' }}
+                        @if (App\Services\DiscordNotifier::hasWebhook() && App\Services\DiscordNotifier::sendsDirectMessages())
+                            Discord webhook and direct messages configured
+                        @elseif (App\Services\DiscordNotifier::sendsDirectMessages())
+                            Discord direct messages configured
+                        @elseif (App\Services\DiscordNotifier::hasWebhook())
+                            Discord webhook configured
+                        @else
+                            Discord not configured
+                        @endif
                     </p>
                     <p class="mt-1 text-gray-500">
-                        Posts mod updates found by the nightly check, finished imports, published builds and repository problems.
-                        Set <span class="font-mono text-xs">SOLDER_DISCORD_WEBHOOK</span> in your .env file.
+                        Sends mod updates found by the nightly check, finished imports, published builds and repository problems.
+                        Set <span class="font-mono text-xs">SOLDER_DISCORD_WEBHOOK</span> to post them to a channel, or
+                        <span class="font-mono text-xs">SOLDER_DISCORD_BOT_TOKEN</span> and <span class="font-mono text-xs">SOLDER_DISCORD_USER_ID</span>
+                        to have a bot direct message you.
                     </p>
                 </div>
                 @if (App\Services\DiscordNotifier::isConfigured())

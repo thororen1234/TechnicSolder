@@ -23,6 +23,10 @@ All notable changes to Technic Solder will be documented in this file.
 - Launcher requests per build are counted and shown on modpack and build pages.
 - A nightly check (`solder:check-updates`) finds mod updates for every modpack's latest build and shows them on the dashboard; set `SOLDER_DISCORD_WEBHOOK` to also post them, finished imports, published builds and repository problems to Discord. Docker includes a `scheduler` service; other installs need `php artisan schedule:run` in cron.
 - Modpack imports, build exports, build updates and repository checks run as background jobs with a progress page when a queue worker is running. The Docker stacks include a `worker` service; set `QUEUE_CONNECTION=redis` (Docker) or `database` to use it. Run `php artisan migrate` for the new queue tables and mod version source columns.
+- Discord notifications can be sent as direct messages: set `SOLDER_DISCORD_BOT_TOKEN` and `SOLDER_DISCORD_USER_ID` (comma-separated for several people) instead of, or as well as, `SOLDER_DISCORD_WEBHOOK`.
+- Import a CurseForge or Modrinth pack as a build of an existing modpack (Import build on the modpack page), optionally under a different build version. When the modpack already has that version, Solder asks whether to overwrite it, import it under another version or cancel.
+- Every modpack import keeps a report with its status, the mods that failed and a full log. Reports are listed on the modpack page and under Recent imports on the Import modpack page. Run `php artisan migrate` for the new `modpack_imports` table.
+- The Docker image includes nginx and serves Solder on port 80 by itself, so it can run without a separate web server (for example on Kubernetes). PHP-FPM still listens on port 9000 for setups that put their own web server in front.
 
 ### Fixed
 
@@ -34,6 +38,8 @@ All notable changes to Technic Solder will be documented in this file.
 - Failed or corrupt downloads, checksum mismatches and remote mod repositories are reported instead of creating broken mod versions, and mods without readable metadata fall back to the provider's version name.
 - Modrinth mods published under the same version number for several loaders no longer overwrite each other, and the loader filter now applies when picking a version.
 - Mod import now requires permission to create mods.
+- The build health check no longer reports NeoForge mods for Minecraft 1.20.2–1.20.4 (which still use `META-INF/mods.toml`) as Forge mods, and reads `required = true` dependencies.
+- Mods without an icon, or whose icon fails to load, show their initial on the mod import pages instead of an empty or broken image.
 
 ### Changed
 

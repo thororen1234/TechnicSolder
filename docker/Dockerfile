@@ -13,9 +13,13 @@ RUN pnpm run build
 FROM php:8.5-fpm@sha256:843e1eff4294a4f44e3f3817efceae4946d395879bdf00387111b824a5daff1a
 
 RUN apt-get update && apt-get install -y \
+    nginx \
     unzip \
     libzip-dev \
     libpq-dev \
+    && rm /etc/nginx/sites-enabled/default \
+    && ln -sf /dev/stdout /var/log/nginx/access.log \
+    && ln -sf /dev/stderr /var/log/nginx/error.log \
     && docker-php-ext-install bcmath pdo_mysql pdo_pgsql zip \
     && pecl install redis \
     && docker-php-ext-enable redis \
@@ -35,7 +39,12 @@ RUN composer install --no-dev --optimize-autoloader
 
 RUN chown -R www-data:www-data storage bootstrap/cache
 
+COPY docker/nginx.conf /etc/nginx/conf.d/solder.conf
+
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
+# 80: the built-in nginx. 9000: PHP-FPM, for running your own web server in front instead.
+EXPOSE 80 9000
 
 CMD ["/entrypoint.sh"]

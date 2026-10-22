@@ -14,6 +14,8 @@
              label: null,
              download: false,
              downloaded: false,
+             redirect: false,
+             report_url: null,
              get percent() {
                  if (this.status === 'completed') return 100;
                  return this.total > 0 ? Math.min(99, Math.round(this.done / this.total * 100)) : 0;
@@ -23,7 +25,7 @@
                  try {
                      const data = await window.ajax(@js(route('task.status', $task['id'])));
                      Object.assign(this, data);
-                     if (this.status === 'completed' && this.download && !this.downloaded) {
+                     if (this.status === 'completed' && (this.download || this.redirect) && !this.downloaded) {
                          this.downloaded = true;
                          window.location.href = this.url;
                      }
@@ -70,6 +72,7 @@
 
             <div class="mt-5 flex items-center gap-2" x-show="status === 'completed' && url" x-cloak>
                 <a :href="url" class="ui-btn ui-btn-primary" x-text="label || 'Continue'"></a>
+                <a :href="report_url" class="ui-btn ui-btn-secondary" x-show="report_url">Import report</a>
                 <span class="text-xs text-gray-500" x-show="download">The download should start automatically.</span>
             </div>
         </section>

@@ -24,7 +24,8 @@ use ZipArchive;
  * Imports a modpack from a CurseForge zip, a Modrinth .mrpack, or a Solder JSON backup.
  *
  * Mods are added to the mod library, the pack's mod loader and override files (configs, scripts...)
- * are stored as mods of their own, and everything is linked to a new build of a new, hidden modpack.
+ * are stored as mods of their own, and everything is linked to a new build of a new, hidden modpack,
+ * or to a new (or overwritten) build of an existing modpack.
  */
 class PackImportService
 {
@@ -35,10 +36,20 @@ class PackImportService
 
     private int $skipped = 0;
 
+    /** The existing modpack to add the build to, or null to create a modpack */
+    private ?Modpack $into = null;
+
+    /** Build version to use instead of the archive's */
+    private ?string $buildVersion = null;
+
+    /** Whether to replace an existing build with the same version rather than stop */
+    private bool $overwrite = false;
+
     /**
      * @param  (Closure(int $done, int $total, string $message): void)|null  $progress
+     * @param  (Closure(string $level, string $message): void)|null  $log  Receives each step and problem, as 'info' or 'error'
      */
-    public function __construct(private ?Closure $progress = null) {}
+    public function __construct(private ?Closure $progress = null, private ?Closure $log = null) {}
 
     /**
      * @return array{error: string}|array{modpack_id: int, build_id: int, imported: int, skipped: int, errors: list<string>}
@@ -54,6 +65,28 @@ class PackImportService
     public function importFromPath(string $path, string $name, string $slug): array
     {
         return $this->process($path, $name, $slug);
+    }
+
+    /**
+     * Import the archive as a build of an existing modpack. When the modpack already has a build with that version,
+     * nothing is changed and a conflict is returned unless $overwrite is set.
+     *
+     * @param  string|null  $version  Build version to use instead of the one in the archive
+     * @return array{error: string}|array{conflict: string}|array{modpack_id: int, build_id: int, imported: int, skipped: int, errors: list<string>}
+     */
+    public function importIntoModpack(string $path, Modpack $modpack, ?string $version = null, bool $overwrite = false): array
+    {
+        $this->into = $modpack;
+        $this->buildVersion = $version;
+        $this->overwrite = $overwrite;
+
+        try {
+            return $this->process($path, '', '');
+        } finally {
+            $this->into = null;
+            $this->buildVersion = null;
+            $this->overwrite = false;
+        }
     }
 
     /**
@@ -85,6 +118,10 @@ class PackImportService
 
         $backup = $this->readSolderBackup($path);
         if ($backup !== null) {
+            if ($this->into !== null) {
+                return ['error' => 'A Solder backup holds a whole modpack, so it can only be restored as a new modpack.'];
+            }
+
             return $this->importSolderBackup($backup, $name, $slug);
         }
 
@@ -130,8 +167,12 @@ class PackImportService
         $primaryLoader = collect($loaders)->firstWhere('primary', true) ?? ($loaders[0] ?? null);
         [$loaderType, $loaderVersion] = $this->parseCurseForgeLoader((string) ($primaryLoader->id ?? ''));
 
-        $modpack = $this->createModpack($slug, $name ?: ($manifest->name ?? 'Imported Pack'));
-        $build = $this->createBuild($modpack, (string) ($manifest->version ?? '1.0'), $minecraft, $primaryLoader->id ?? '');
+        $build = $this->prepareBuild($name ?: ($manifest->name ?? 'Imported Pack'), $slug, (string) ($manifest->version ?? '1.0'), $minecraft, $primaryLoader->id ?? '');
+        if (is_array($build)) {
+            return $build;
+        }
+        $modpack = $build->modpack;
+        $this->note(sprintf('CurseForge pack %s %s: %d mods for Minecraft %s, %s', $manifest->name ?? '', $manifest->version ?? '', count($files), $minecraft ?: '?', ($primaryLoader->id ?? '') ?: 'no mod loader'));
 
         $modversionIds = [];
 
@@ -180,8 +221,11 @@ class PackImportService
             }
         }
 
-        $modpack = $this->createModpack($slug, $name ?: ($index->name ?? 'Imported Pack'));
-        $build = $this->createBuild($modpack, (string) ($index->versionId ?? '1.0'), $minecraft, $loaderType ? "$loaderType-$loaderVersion" : '');
+        $build = $this->prepareBuild($name ?: ($index->name ?? 'Imported Pack'), $slug, (string) ($index->versionId ?? '1.0'), $minecraft, $loaderType ? "$loaderType-$loaderVersion" : '');
+        if (is_array($build)) {
+            return $build;
+        }
+        $modpack = $build->modpack;
 
         $modversionIds = [];
 
@@ -202,6 +246,7 @@ class PackImportService
         }
 
         $total = count($files);
+        $this->note(sprintf('Modrinth pack %s %s: %d files for Minecraft %s, %s', $index->name ?? '', $index->versionId ?? '', $total, $minecraft ?: '?', $loaderType ? "$loaderType $loaderVersion" : 'no mod loader'));
         $this->report(0, $total, 'Looking up mods on Modrinth');
         $mods = Modrinth::modsForVersions(array_map(fn ($entry) => $entry[2], $modrinthFiles));
         $done = 0;
@@ -276,6 +321,7 @@ class PackImportService
         if (isset($result->modversionIds[$versionKey])) {
             $modversionIds[] = (int) $result->modversionIds[$versionKey];
             $this->imported++;
+            $this->note("Added {$modData->name} ".($modData->versions[$versionKey]->label ?? $versionKey));
         } else {
             $this->fail(...($result->errors ?: ["{$modData->name}: import failed"]));
         }
@@ -384,6 +430,7 @@ class PackImportService
             ['mod_id' => $mod->id, 'version' => $versionName],
             ['filesize' => filesize($finalPath), 'md5' => md5_file($finalPath)],
         );
+        $this->note('Saved '.count($entries)." override files (configs, scripts...) as $modSlug $versionName");
 
         $modversionIds[] = $modversion->id;
     }
@@ -515,6 +562,39 @@ class PackImportService
         return Str::slug(implode('-', $slugParts)) ?: Str::slug($base);
     }
 
+    /**
+     * The build to import into: a new build of a new modpack, a new build of the modpack being imported into,
+     * or, when overwriting, that modpack's build with the same version.
+     *
+     * @return Build|array{conflict: string}
+     */
+    private function prepareBuild(string $name, string $slug, string $version, string $minecraft, string $loader): Build|array
+    {
+        $version = $this->buildVersion ?: $version;
+
+        if ($this->into === null) {
+            return $this->createBuild($this->createModpack($slug, $name), $version, $minecraft, $loader);
+        }
+
+        $existing = Build::where('modpack_id', $this->into->id)->where('version', $version)->first();
+        if ($existing === null) {
+            $this->note("Adding build $version to {$this->into->name}");
+
+            return $this->createBuild($this->into, $version, $minecraft, $loader);
+        }
+
+        if (! $this->overwrite) {
+            return ['conflict' => $version];
+        }
+
+        $this->note("Overwriting build $version of {$this->into->name}; its mods are replaced with the pack's");
+        $existing->minecraft = $minecraft;
+        $existing->forge = $loader ?: null;
+        $existing->save();
+
+        return $existing;
+    }
+
     private function createModpack(string $slug, string $name): Modpack
     {
         $modpack = new Modpack;
@@ -553,6 +633,25 @@ class PackImportService
     {
         array_push($this->errors, ...$messages);
         $this->skipped++;
+
+        foreach ($messages as $message) {
+            $this->writeLog('error', $message);
+        }
+    }
+
+    private function note(string $message): void
+    {
+        $this->writeLog('info', $message);
+    }
+
+    /**
+     * @param  'info'|'error'  $level
+     */
+    private function writeLog(string $level, string $message): void
+    {
+        if ($this->log !== null) {
+            ($this->log)($level, $message);
+        }
     }
 
     private function result(Modpack $modpack, Build $build): array

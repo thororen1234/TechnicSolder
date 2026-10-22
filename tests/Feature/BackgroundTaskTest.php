@@ -7,6 +7,7 @@ use App\Jobs\ImportModpack;
 use App\Models\Build;
 use App\Models\Mod;
 use App\Models\Modpack;
+use App\Models\ModpackImport;
 use App\Models\Modversion;
 use App\Models\User;
 use App\Models\UserPermission;
@@ -78,15 +79,20 @@ final class BackgroundTaskTest extends TestCase
 
         $jobs = Queue::pushed(ImportModpack::class);
         $this->assertCount(1, $jobs);
+        $archivePath = ModpackImport::findOrFail($jobs->first()->importId)->archive_path;
+        Storage::disk('local')->assertExists($archivePath);
         $jobs->first()->handle();
 
         $modpack = Modpack::where('slug', 'queued-pack')->firstOrFail();
+        $import = ModpackImport::findOrFail($jobs->first()->importId);
         $this->getJson("/task/$taskId/status")->assertJson([
             'status' => 'completed',
             'url' => url("modpack/view/{$modpack->id}"),
             'download' => false,
+            'report_url' => route('modpack.import.show', $import->id),
         ]);
-        $this->assertFileDoesNotExist($jobs->first()->path);
+        Storage::disk('local')->assertMissing($archivePath);
+        $this->assertNull($import->archive_path);
     }
 
     public function test_queued_export_is_downloadable_by_its_owner_only(): void

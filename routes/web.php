@@ -84,6 +84,8 @@ Route::middleware('auth')->group(function () {
     Route::post('modpack/clone/{modpack_id}', [ModpackController::class, 'postClone']);
     Route::get('modpack/import', [ModpackController::class, 'getImportModpack'])->name('modpack.import');
     Route::post('modpack/import', [ModpackController::class, 'postImportModpack']);
+    Route::get('modpack/imports/{import_id}', [ModpackController::class, 'getImportReport'])->whereNumber('import_id')->name('modpack.import.show');
+    Route::post('modpack/imports/{import_id}', [ModpackController::class, 'postImportReport'])->whereNumber('import_id');
     Route::get('modpack/create', [ModpackController::class, 'getCreate'])->name('modpack.create');
     Route::post('modpack/create', [ModpackController::class, 'postCreate']);
     Route::get('modpack/edit/{modpack_id}', [ModpackController::class, 'getEdit'])->name('modpack.edit');

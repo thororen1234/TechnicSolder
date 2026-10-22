@@ -157,11 +157,7 @@
                                     </td>
                                     <td class="px-3 py-3">
                                         <div class="flex items-center gap-3 min-w-0">
-                                            @if (! empty($mod->thumbnailUrl))
-                                                <img src="{{ $mod->thumbnailUrl }}" alt="" class="size-9 shrink-0 rounded-lg border border-gray-200 dark:border-gray-800 object-contain bg-white dark:bg-gray-900" loading="lazy">
-                                            @else
-                                                <span class="size-9 shrink-0 rounded-lg border border-gray-200 dark:border-gray-800"></span>
-                                            @endif
+                                            <x-mod-icon :url="$mod->thumbnailUrl" :name="$mod->displayName ?? $mod->name" class="size-9 rounded-lg text-sm" />
                                             <div class="min-w-0">
                                                 <p class="font-medium text-gray-950 dark:text-white truncate">{{ $mod->displayName ?? $mod->name }}</p>
                                                 <p class="text-xs text-gray-500 line-clamp-1 max-w-xl">{{ $mod->displaySummary ?? $mod->summary }}</p>

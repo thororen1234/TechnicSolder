@@ -288,6 +288,10 @@ html.dark {
         @apply border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300;
     }
 
+    .ui-badge-danger {
+        @apply border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300;
+    }
+
     .ui-kbd {
         @apply inline-flex items-center justify-center min-w-5 h-5 px-1 rounded border border-gray-200 bg-gray-50 font-sans text-[11px] font-medium text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400;
     }

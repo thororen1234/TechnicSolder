@@ -17,6 +17,14 @@ class ModpackPolicy
         return $user->permission->modpacks_create;
     }
 
+    /**
+     * Importing creates a modpack, or adds a build to a modpack the user manages.
+     */
+    public function import(User $user): bool
+    {
+        return $user->permission->modpacks_create || $user->permission->modpacks_manage;
+    }
+
     public function update(User $user, Modpack $modpack): bool
     {
         return $user->permission->modpacks_manage
