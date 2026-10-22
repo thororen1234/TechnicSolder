@@ -107,6 +107,36 @@ final class BuildHealthTest extends TestCase
         );
     }
 
+    private function publish(array $extra = []): array
+    {
+        return $this->post('/modpack/modify/published', ['build' => $this->build->id, 'published' => 1] + $extra, ['X-Requested-With' => 'XMLHttpRequest'])
+            ->assertOk()
+            ->json();
+    }
+
+    public function test_publishing_a_build_with_problems_needs_confirmation(): void
+    {
+        $this->add('sodium', '0.5.0', ['mods/sodium.jar' => $this->fabricJar('sodium', ['cloth-config' => '*'])]);
+
+        $response = $this->publish();
+
+        $this->assertSame('blocked', $response['status']);
+        $this->assertSame('Build 1.0 has 2 problems that may stop it launching.', $response['reason']);
+        $this->assertContains('sodium.jar requires "cloth-config", which isn\'t in this build.', $response['issues']);
+        $this->assertFalse((bool) $this->build->fresh()->is_published);
+
+        $this->assertSame('Build 1.0 is now published', $this->publish(['force' => 1])['success']);
+        $this->assertTrue((bool) $this->build->fresh()->is_published);
+    }
+
+    public function test_healthy_build_publishes_straight_away(): void
+    {
+        $this->addHealthyFabricBase();
+
+        $this->assertSame('Build 1.0 is now published', $this->publish()['success']);
+        $this->assertTrue((bool) $this->build->fresh()->is_published);
+    }
+
     public function test_quilt_builds_accept_fabric_mods(): void
     {
         $this->add('quilt-loader', '1.20.1-0.29.1', ['bin/version.json' => '{}']);

@@ -1007,6 +1007,19 @@ class ModpackController extends Controller
                 $build = Build::with('modpack')->findOrFail(Request::input('build'));
                 $this->authorize('update', [Build::class, $build->modpack]);
 
+                // Check the build before it reaches players, unless the user already chose to publish anyway
+                if (\request()->boolean('published') && ! \request()->boolean('force')) {
+                    $errors = collect(app(BuildHealthService::class)->check($build)['issues'])->where('severity', 'error')->values();
+
+                    if ($errors->isNotEmpty()) {
+                        return response()->json([
+                            'status' => 'blocked',
+                            'reason' => "Build {$build->version} has ".$errors->count().' '.Str::plural('problem', $errors->count()).' that may stop it launching.',
+                            'issues' => $errors->take(10)->pluck('message')->all(),
+                        ]);
+                    }
+                }
+
                 $build->is_published = \request()->boolean('published');
                 $build->save();
 

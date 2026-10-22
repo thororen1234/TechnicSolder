@@ -137,7 +137,7 @@
                                 <td class="px-3 py-3 hidden sm:table-cell">
                                     <input autocomplete="off" type="checkbox" class="ui-switch"
                                            :checked="row.is_published"
-                                           @change="togglePublished(row.id, $event.target.checked)"
+                                           @change="togglePublished(row.id, $event.target.checked, $event.target)"
                                            :aria-label="'Published: ' + row.version">
                                 </td>
                                 <td class="px-3 py-3 hidden md:table-cell">
@@ -226,11 +226,23 @@
                     }
                 },
 
-                async togglePublished(buildId, checked) {
+                async togglePublished(buildId, checked, input = null, force = false) {
                     try {
                         const data = await window.ajaxPost(
-                            `{{ url('modpack/modify/published') }}?build=${buildId}&published=${checked ? 1 : 0}`
+                            `{{ url('modpack/modify/published') }}?build=${buildId}&published=${checked ? 1 : 0}${force ? '&force=1' : ''}`
                         );
+
+                        // The health check found problems: confirm before publishing anyway
+                        if (data.status === 'blocked') {
+                            const details = data.issues.map(issue => '- ' + issue).join('\n');
+                            if (confirm(`${data.reason}\n\n${details}\n\nPublish anyway?`)) {
+                                return this.togglePublished(buildId, checked, input, true);
+                            }
+                            if (input) input.checked = false;
+                            Alpine.store('toasts').add('Build was not published', 'warning');
+                            return;
+                        }
+
                         Alpine.store('toasts').add(data.success, 'success');
                     } catch (error) {
                         Alpine.store('toasts').add(error.message || 'An unknown error occurred', 'error');
