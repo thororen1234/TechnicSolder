@@ -33,7 +33,7 @@ class SolderController extends Controller
         $permission = Auth::user()->permission;
 
         $entries = ActivityLog::with('user', 'modpack', 'build')
-            ->when(! $permission?->solder_full, fn ($query) => $query->whereIn('modpack_id', $permission?->modpacks ?? []))
+            ->when(! $permission?->solder_full, fn ($query) => $query->whereIn('modpack_id', $permission->modpacks ?? []))
             ->when(Request::query('modpack'), fn ($query, $modpackId) => $query->where('modpack_id', $modpackId))
             ->latest('id')
             ->paginate(50)

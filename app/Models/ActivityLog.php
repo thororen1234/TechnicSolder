@@ -64,7 +64,7 @@ class ActivityLog extends Model
     ): self {
         return self::create([
             'user_id' => $userId ?? Auth::id() ?? Auth::guard('sanctum')->id(),
-            'modpack_id' => $modpack?->id ?? $build?->modpack_id,
+            'modpack_id' => $modpack->id ?? $build?->modpack_id,
             'build_id' => $build?->id,
             'action' => $action,
             'description' => $description,
