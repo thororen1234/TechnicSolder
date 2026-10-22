@@ -121,6 +121,68 @@ class BuildUpdateService
     }
 
     /**
+     * Copy the build to another Minecraft version: the loader and every mod imported from a provider are
+     * swapped for their newest version for that Minecraft version. Mods added by hand are copied unchanged,
+     * and mods without a compatible version are left out.
+     *
+     * @return array{build: Build, updated: int, errors: list<string>}
+     */
+    public function copyToMinecraft(Build $build, string $newVersion, string $minecraft): array
+    {
+        $build->loadMissing('modversions.mod');
+
+        $newBuild = $build->replicate();
+        $newBuild->version = $newVersion;
+        $newBuild->minecraft = $minecraft;
+        $newBuild->forge = null;
+        $newBuild->is_published = false;
+        $newBuild->save();
+
+        $loaders = $this->compatibleLoaders($build);
+        $ids = [];
+        $updated = 0;
+        $errors = [];
+
+        foreach ($build->modversions->values() as $index => $modversion) {
+            $name = $modversion->mod->pretty_name ?: $modversion->mod->name;
+            $this->report($index, $build->modversions->count(), "Finding $name for Minecraft $minecraft");
+
+            $provider = $this->providerFor($modversion);
+            if ($provider === null) {
+                $ids[] = $modversion->id;
+                $errors[] = "$name {$modversion->version} was added by hand, so it was copied unchanged. Check that it works on Minecraft $minecraft.";
+
+                continue;
+            }
+
+            $isLoader = $this->isLoader($modversion);
+            $projectId = $isLoader ? $minecraft : (string) $modversion->provider_project_id;
+            $modData = $provider::modFor($projectId, $isLoader ? '' : $minecraft, $isLoader ? '' : ($loaders[0] ?? ''));
+            $latest = $modData
+                ? ModProvider::latestStableVersionForGame($modData->versions, $isLoader ? '' : $minecraft, '', $isLoader ? [] : $loaders)
+                : null;
+
+            if ($latest === null) {
+                $errors[] = "$name has no version for Minecraft $minecraft, so it was left out.";
+
+                continue;
+            }
+
+            $result = $provider::install($projectId, [$latest], $modData);
+            if (isset($result->modversionIds[$latest])) {
+                $ids[] = (int) $result->modversionIds[$latest];
+                $updated++;
+            } else {
+                array_push($errors, ...($result->errors ?: ["$name could not be imported for Minecraft $minecraft."]));
+            }
+        }
+
+        $newBuild->modversions()->sync(array_values(array_unique($ids)));
+
+        return ['build' => $newBuild, 'updated' => $updated, 'errors' => $errors];
+    }
+
+    /**
      * @return class-string<ModProvider>|null
      */
     private function providerFor(Modversion $modversion): ?string

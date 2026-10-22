@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\JavaRuntimesEnum;
 use App\JavaVersionsEnum;
+use App\Jobs\CopyBuildToMinecraft;
 use App\Jobs\ExportBuild;
 use App\Jobs\ImportModpack;
 use App\Jobs\UpdateBuild;
@@ -271,6 +272,45 @@ class ModpackController extends Controller
 
         $taskId = TaskTracker::create(Auth::id(), "Updating {$build->modpack->name} to {$validation->validated()['version']}");
         $this->runTask(new UpdateBuild($taskId, $build->id, $validation->validated()['version'], array_map('intval', Request::input('modversions')), Auth::id()));
+
+        $task = TaskTracker::get($taskId);
+        if ($task['status'] === 'completed') {
+            $redirect = redirect($task['result']['url'])->with('success', $task['result']['message']);
+
+            return empty($task['errors']) ? $redirect : $redirect->withErrors($task['errors']);
+        }
+        if ($task['status'] === 'failed') {
+            return redirect('modpack/build/'.$build->id)->withErrors($task['errors']);
+        }
+
+        return redirect()->route('task.show', $taskId);
+    }
+
+    public function postCopyBuild($build_id): RedirectResponse
+    {
+        $build = Build::with('modpack')->find($build_id);
+
+        if (empty($build)) {
+            return redirect('modpack/list')->withErrors(['Build not found']);
+        }
+
+        $this->authorize('update', [Build::class, $build->modpack]);
+
+        $validation = Validator::make(Request::all(), [
+            'version' => ['required', 'string', 'max:255', Rule::unique('builds')->where('modpack_id', $build->modpack_id)],
+            'minecraft' => ['required', 'string', 'max:64', 'regex:/^\d+\.\d+(\.\d+)?$/'],
+        ], [
+            'version.unique' => 'This modpack already has a build with that version.',
+            'minecraft.regex' => 'Enter a Minecraft version such as 1.21.1 or 26.1.',
+        ]);
+
+        if ($validation->fails()) {
+            return redirect('modpack/build/'.$build->id)->withErrors($validation->messages())->withInput();
+        }
+
+        ['version' => $version, 'minecraft' => $minecraft] = $validation->validated();
+        $taskId = TaskTracker::create(Auth::id(), "Copying {$build->modpack->name} {$build->version} to Minecraft $minecraft");
+        $this->runTask(new CopyBuildToMinecraft($taskId, $build->id, $version, $minecraft, Auth::id()));
 
         $task = TaskTracker::get($taskId);
         if ($task['status'] === 'completed') {

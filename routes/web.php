@@ -67,6 +67,7 @@ Route::middleware('auth')->group(function () {
     Route::get('modpack/build/{build_id}/export/{format}', [ModpackController::class, 'getExportBuildArchive'])
         ->whereIn('format', array_keys(PackExportService::FORMATS))
         ->name('modpack.build.export.archive');
+    Route::post('modpack/build/{build_id}/copy', [ModpackController::class, 'postCopyBuild'])->name('modpack.build.copy');
     Route::get('modpack/build/{build_id}/compare', [ModpackController::class, 'getCompareBuild'])->name('modpack.build.compare');
     Route::get('modpack/build/{build_id}/health', [ModpackController::class, 'getBuildHealth'])->name('modpack.build.health');
     Route::get('modpack/build/{build_id}/updates', [ModpackController::class, 'getBuildUpdates'])->name('modpack.build.updates');

@@ -29,6 +29,26 @@
             </div>
         </div>
         <div class="flex items-center gap-2 shrink-0">
+            <div class="relative" x-data="{ open: {{ $errors->has('minecraft') ? 'true' : 'false' }} }" @keydown.escape="open = false">
+                <button type="button" @click="open = !open" class="ui-btn ui-btn-secondary" :aria-expanded="open"
+                        title="Copy this build to another Minecraft version, updating every mod that can be">Copy to…</button>
+                <form x-show="open" x-transition.opacity.duration.100ms @click.outside="open = false" style="display: none"
+                      method="POST" action="{{ route('modpack.build.copy', ['build_id' => $build->id]) }}"
+                      class="ui-menu absolute right-0 z-20 mt-1 w-80 p-4 space-y-3">
+                    @csrf
+                    <p class="text-sm font-medium text-gray-950 dark:text-white">Copy to another Minecraft version</p>
+                    <p class="text-xs text-gray-500">Mods imported from Modrinth, CurseForge and the loader sites move to their newest compatible version. Mods without one are left out.</p>
+                    <div>
+                        <label for="copy-minecraft" class="ui-label">Minecraft version</label>
+                        <input id="copy-minecraft" name="minecraft" value="{{ old('minecraft') }}" placeholder="e.g. 1.21.1 or 26.1" class="ui-control font-mono" required>
+                    </div>
+                    <div>
+                        <label for="copy-version" class="ui-label">New build version</label>
+                        <input id="copy-version" name="version" value="{{ old('version') }}" class="ui-control font-mono" required>
+                    </div>
+                    <button type="submit" class="ui-btn ui-btn-primary w-full">Copy build</button>
+                </form>
+            </div>
             <a href="{{ route('modpack.build.compare', ['build_id' => $build->id]) }}" class="ui-btn ui-btn-secondary">Compare</a>
             <div class="relative" x-data="{ open: false }" @keydown.escape="open = false">
                 <button type="button" @click="open = !open" @click.outside="open = false" class="ui-btn ui-btn-secondary" :aria-expanded="open">

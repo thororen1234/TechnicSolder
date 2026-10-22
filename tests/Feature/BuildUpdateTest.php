@@ -157,6 +157,39 @@ final class BuildUpdateTest extends TestCase
         $response->assertSee('1.0.1');
     }
 
+    public function test_copying_to_another_minecraft_version_moves_mods_and_loader(): void
+    {
+        Http::fake([
+            'api.modrinth.com/v2/project/AANobbMI' => Http::response(['id' => 'AANobbMI', 'slug' => 'sodium', 'title' => 'Sodium', 'project_type' => 'mod']),
+            'api.modrinth.com/v2/project/AANobbMI/members' => Http::response([]),
+            'api.modrinth.com/v2/project/AANobbMI/version*' => Http::response([[
+                'id' => 'v26', 'version_number' => '0.7.0', 'version_type' => 'release', 'game_versions' => ['26.1'], 'loaders' => ['fabric'],
+                'files' => [['url' => 'https://cdn.modrinth.com/data/AANobbMI/versions/v26/sodium.jar', 'filename' => 'sodium.jar', 'primary' => true]],
+            ]]),
+            'cdn.modrinth.com/data/AANobbMI/versions/v26/sodium.jar' => Http::response($this->makeFabricJar('sodium', '0.7.0', '26.1')),
+        ]);
+
+        $response = $this->post("/modpack/build/{$this->build->id}/copy", ['version' => '2.0.0', 'minecraft' => '26.1']);
+
+        $copy = Build::where('modpack_id', $this->modpack->id)->where('version', '2.0.0')->firstOrFail();
+        $response->assertRedirect(url("modpack/build/{$copy->id}"));
+        $this->assertSame('26.1', $copy->minecraft);
+        $this->assertFalse((bool) $copy->is_published);
+        $this->assertSame(
+            ['fabric-loader' => '26.1-0.14.9', 'handmade' => '1.0', 'sodium' => '26.1-0.7.0'],
+            $copy->modversions()->with('mod')->get()->mapWithKeys(fn ($mv) => [$mv->mod->name => $mv->version])->sortKeys()->all()
+        );
+        // Mods added by hand can't be checked, so the user is told
+        $this->assertStringContainsString('Handmade 1.0 was added by hand', session('errors')->first());
+        Http::assertSent(fn ($request) => str_contains(urldecode($request->url()), 'game_versions=["26.1"]'));
+    }
+
+    public function test_copy_needs_a_valid_minecraft_version(): void
+    {
+        $this->post("/modpack/build/{$this->build->id}/copy", ['version' => '2.0.0', 'minecraft' => 'latest'])
+            ->assertSessionHasErrors('minecraft');
+    }
+
     public function test_new_build_version_must_be_unused(): void
     {
         $response = $this->post("/modpack/build/{$this->build->id}/updates", [
