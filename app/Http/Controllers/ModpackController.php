@@ -13,6 +13,7 @@ use App\Models\Client;
 use App\Models\Mod;
 use App\Models\Modpack;
 use App\Models\Modversion;
+use App\Services\BuildHealthService;
 use App\Services\BuildUpdateService;
 use App\Services\PackExportService;
 use App\Services\TaskTracker;
@@ -219,6 +220,16 @@ class ModpackController extends Controller
             'unchanged' => $current->count() - $added->count() - $updated->count(),
             'markdown' => trim($markdown),
         ]);
+    }
+
+    public function getBuildHealth(BuildHealthService $health, $build_id): JsonResponse
+    {
+        $build = Build::with('modpack')->find($build_id);
+        abort_if(empty($build), 404);
+
+        $this->authorize('update', [Build::class, $build->modpack]);
+
+        return response()->json($health->check($build));
     }
 
     public function getBuildUpdates(BuildUpdateService $updates, $build_id): JsonResponse
