@@ -169,6 +169,58 @@ class ModpackController extends Controller
         ]);
     }
 
+    /**
+     * Compare a build with another build of the same modpack (the previous one by default).
+     */
+    public function getCompareBuild($build_id): View|RedirectResponse
+    {
+        $build = Build::with('modpack.builds', 'modversions.mod')->find($build_id);
+
+        if (empty($build)) {
+            return redirect('modpack/list')->withErrors(['Build not found']);
+        }
+
+        $this->authorize('update', [Build::class, $build->modpack]);
+
+        $others = $build->modpack->builds->where('id', '!=', $build->id)->sortByDesc('id')->values();
+        $base = Request::query('with')
+            ? $others->firstWhere('id', (int) Request::query('with'))
+            : ($others->first(fn (Build $other) => $other->id < $build->id) ?? $others->first());
+        $base?->load('modversions.mod');
+
+        $current = $build->modversions->keyBy(fn (Modversion $modversion) => $modversion->mod->name);
+        $previous = $base ? $base->modversions->keyBy(fn (Modversion $modversion) => $modversion->mod->name) : collect();
+        $label = fn (Modversion $modversion) => $modversion->mod->pretty_name ?: $modversion->mod->name;
+
+        $added = $current->diffKeys($previous)->sortBy($label)->values();
+        $removed = $previous->diffKeys($current)->sortBy($label)->values();
+        $updated = $current->intersectByKeys($previous)
+            ->filter(fn (Modversion $modversion, string $name) => $modversion->version !== $previous[$name]->version)
+            ->map(fn (Modversion $modversion, string $name) => ['from' => $previous[$name], 'to' => $modversion])
+            ->sortBy(fn (array $change) => $label($change['to']))
+            ->values();
+
+        $sections = [
+            "## {$build->modpack->name} {$build->version}",
+            $base ? "Changes since {$base->version}:" : null,
+            $added->isEmpty() ? null : "### Added\n".$added->map(fn ($mv) => "- {$label($mv)} {$mv->version}")->implode("\n"),
+            $updated->isEmpty() ? null : "### Updated\n".$updated->map(fn ($change) => "- {$label($change['to'])} {$change['from']->version} → {$change['to']->version}")->implode("\n"),
+            $removed->isEmpty() ? null : "### Removed\n".$removed->map(fn ($mv) => "- {$label($mv)}")->implode("\n"),
+        ];
+        $markdown = implode("\n\n", array_filter($sections));
+
+        return view('modpack.build.compare', [
+            'build' => $build,
+            'base' => $base,
+            'others' => $others,
+            'added' => $added,
+            'removed' => $removed,
+            'updated' => $updated,
+            'unchanged' => $current->count() - $added->count() - $updated->count(),
+            'markdown' => trim($markdown),
+        ]);
+    }
+
     public function getBuildUpdates(BuildUpdateService $updates, $build_id): JsonResponse
     {
         $build = Build::with('modpack')->find($build_id);
