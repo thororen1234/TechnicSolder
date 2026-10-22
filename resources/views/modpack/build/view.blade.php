@@ -3,98 +3,257 @@
     <title>{{ $build->version }} - {{ $build->modpack->name }} - Technic Solder</title>
 @stop
 @section('content')
-    <div class="mb-6">
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Build Management</h1>
-    </div>
-
-    {{-- Build info card --}}
-    <div class="ui-card mb-6">
-        <div class="ui-card-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <span class="font-semibold text-gray-900 dark:text-white">{{ $build->modpack->name }} - build {{ $build->version }}</span>
-            <div class="flex items-center gap-2">
-                <button onclick="window.location.reload()"
-                        class="ui-btn ui-btn-sm ui-btn-primary">
-                    Refresh
-                </button>
-                <div class="relative" x-data="{ open: false }" @keydown.escape="open = false">
-                    <button type="button" @click="open = !open" @click.outside="open = false"
-                            class="ui-btn ui-btn-sm ui-btn-primary" :aria-expanded="open">
-                        Export
-                        <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>
-                    </button>
-                    <div x-show="open" x-transition.opacity.duration.100ms style="display: none"
-                         class="ui-menu absolute right-0 z-20 mt-1 w-72">
-                        @foreach (App\Services\PackExportService::FORMATS as $format => $exportFormat)
-                            <a href="{{ route('modpack.build.export.archive', ['build_id' => $build->id, 'format' => $format]) }}"
-                               class="ui-menu-item flex-col items-start! gap-0!" @click="open = false">
-                                <span class="font-medium text-gray-950 dark:text-white">{{ $exportFormat['label'] }}</span>
-                                <span class="text-xs text-gray-500">{{ $exportFormat['description'] }}</span>
-                            </a>
-                        @endforeach
-                        <div class="my-1 h-px bg-gray-100 dark:bg-gray-900"></div>
-                        <a href="{{ url('modpack/build/' . $build->id . '/export') }}" class="ui-menu-item flex-col items-start! gap-0!">
-                            <span class="font-medium text-gray-950 dark:text-white">Mod list (.csv)</span>
-                            <span class="text-xs text-gray-500">Names, versions and checksums</span>
-                        </a>
-                    </div>
-                </div>
-                <a href="{{ url('modpack/build/' . $build->id . '/edit') }}"
-                   class="ui-btn ui-btn-sm ui-btn-primary">
-                    Edit
-                </a>
-                <a href="{{ url('modpack/view/' . $build->modpack->id) }}"
-                   class="ui-btn ui-btn-sm ui-btn-secondary">
-                    Back to modpack
-                </a>
-            </div>
-        </div>
-        <div class="px-5 py-4">
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div>
-                    <span class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Build</span>
-                    <p class="mt-1 text-sm font-medium text-gray-900 dark:text-white">{{ $build->version }}</p>
-                </div>
-                <div>
-                    <span class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Minecraft version</span>
-                    <p class="mt-1 text-sm font-medium text-gray-900 dark:text-white">{{ $build->minecraft }}</p>
-                </div>
-                <div>
-                    <span class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Required Java version</span>
-                    <p class="mt-1 text-sm font-medium text-gray-900 dark:text-white">{{ $build->min_java ?: 'Not set' }}</p>
-                </div>
-                <div>
-                    <span class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Required RAM/memory</span>
-                    <p class="mt-1 text-sm font-medium text-gray-900 dark:text-white">{{ $build->min_memory ? $build->min_memory . ' MB' : 'Not set' }}</p>
-                </div>
-                @if (config('solder.advanced_mode'))
-                <div class="sm:col-span-2 lg:col-span-4">
-                    <span class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Mojang Java Runtime Override</span>
-                    <p class="mt-1 text-sm font-medium text-gray-900 dark:text-white">{{ $build->java_runtime ? \App\JavaRuntimesEnum::from($build->java_runtime)->label() : 'Default (no override)' }}</p>
-                </div>
+    @php($loader = $build->loader())
+    <div class="page-header">
+        <div class="min-w-0">
+            <a href="{{ url('modpack/view/'.$build->modpack->id) }}" class="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-950 dark:hover:text-white">
+                <img src="{{ $build->modpack->icon_url ?? asset('/resources/default/icon.png') }}" alt="" class="size-4 rounded">
+                {{ $build->modpack->name }}
+            </a>
+            <div class="mt-1 flex items-center gap-3 flex-wrap">
+                <h1 class="page-title">Build <span class="font-mono">{{ $build->version }}</span></h1>
+                @if ($build->modpack->recommended === $build->version)
+                    <span class="ui-badge ui-badge-success">Recommended</span>
+                @endif
+                @if ($build->modpack->latest === $build->version)
+                    <span class="ui-badge ui-badge-primary">Latest</span>
+                @endif
+                @if ($build->is_published)
+                    <span class="ui-badge">Published</span>
+                @else
+                    <span class="ui-badge ui-badge-warning">Draft</span>
+                @endif
+                @if ($build->private)
+                    <span class="ui-badge"><x-icons.lock-closed class="size-3" /> Private</span>
                 @endif
             </div>
         </div>
+        <div class="flex items-center gap-2 shrink-0">
+            <a href="{{ route('modpack.build.compare', ['build_id' => $build->id]) }}" class="ui-btn ui-btn-secondary">Compare</a>
+            <div class="relative" x-data="{ open: false }" @keydown.escape="open = false">
+                <button type="button" @click="open = !open" @click.outside="open = false" class="ui-btn ui-btn-secondary" :aria-expanded="open">
+                    Export
+                    <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>
+                </button>
+                <div x-show="open" x-transition.opacity.duration.100ms style="display: none" class="ui-menu absolute right-0 z-20 mt-1 w-72">
+                    @foreach (App\Services\PackExportService::FORMATS as $format => $exportFormat)
+                        <a href="{{ route('modpack.build.export.archive', ['build_id' => $build->id, 'format' => $format]) }}"
+                           class="ui-menu-item flex-col items-start! gap-0!" @click="open = false">
+                            <span class="font-medium text-gray-950 dark:text-white">{{ $exportFormat['label'] }}</span>
+                            <span class="text-xs text-gray-500">{{ $exportFormat['description'] }}</span>
+                        </a>
+                    @endforeach
+                    <div class="my-1 h-px bg-gray-100 dark:bg-gray-900"></div>
+                    <a href="{{ url('modpack/build/'.$build->id.'/export') }}" class="ui-menu-item flex-col items-start! gap-0!">
+                        <span class="font-medium text-gray-950 dark:text-white">Mod list (.csv)</span>
+                        <span class="text-xs text-gray-500">Names, versions and checksums</span>
+                    </a>
+                </div>
+            </div>
+            <a href="{{ url('modpack/build/'.$build->id.'/edit') }}" class="ui-btn ui-btn-primary">Edit build</a>
+        </div>
     </div>
 
-    {{-- Live build warning --}}
-    @if ($build->isLive())
-        <div x-data="{ showPanels: false }" class="mb-6">
-            <div class="ui-alert ui-alert-warning p-4">
-                <p>This build is currently published and not marked as private. <strong>You are editing a live build</strong>.</p>
-                <p x-show="!showPanels" class="mt-2">Build management panels have been hidden.
-                    <button @click="showPanels = true"
-                            class="underline font-medium hover:text-yellow-800 dark:hover:text-yellow-300 transition-colors">Click here to show them</button>
-                </p>
-            </div>
-            <template x-if="showPanels">
-                <div class="mt-6">
-                    @include('modpack.build._edit-panels')
-                </div>
-            </template>
+    @session('success')
+        <div class="ui-alert ui-alert-success mb-6 p-4">{{ $value }}</div>
+    @endsession
+    @include('partial.form-errors')
+
+    {{-- Build details --}}
+    <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-8">
+        <div class="ui-stat">
+            <p class="ui-stat-label">Minecraft</p>
+            <p class="ui-stat-value font-mono text-xl">{{ $build->minecraft }}</p>
         </div>
-    @else
-        @include('modpack.build._edit-panels')
-    @endif
+        <div class="ui-stat">
+            <p class="ui-stat-label">Mod loader</p>
+            @if ($loader)
+                <p class="ui-stat-value text-xl">{{ ['forge' => 'Forge', 'neoforge' => 'NeoForge', 'fabric' => 'Fabric', 'quilt' => 'Quilt'][$loader['type']] }}</p>
+                <p class="mt-0.5 font-mono text-xs text-gray-500 truncate">{{ $loader['version'] }}</p>
+            @else
+                <p class="ui-stat-value text-xl text-gray-300 dark:text-gray-700">None</p>
+            @endif
+        </div>
+        <div class="ui-stat">
+            <p class="ui-stat-label">Java</p>
+            <p class="ui-stat-value text-xl">{{ $build->min_java ?: '-' }}</p>
+            @if (config('solder.advanced_mode') && $build->java_runtime)
+                <p class="mt-0.5 text-xs text-gray-500 truncate">{{ \App\JavaRuntimesEnum::from($build->java_runtime)->label() }}</p>
+            @endif
+        </div>
+        <div class="ui-stat">
+            <p class="ui-stat-label">Memory</p>
+            <p class="ui-stat-value text-xl">{{ $build->min_memory ? number_format($build->min_memory).' MB' : '-' }}</p>
+        </div>
+        <div class="ui-stat col-span-2 lg:col-span-1">
+            <p class="ui-stat-label">Mods</p>
+            <p class="ui-stat-value">{{ $build->modversions->count() }}</p>
+        </div>
+    </div>
+
+    <div x-data="{ tab: ['health', 'updates'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'mods' }"
+         x-init="$watch('tab', value => history.replaceState(null, '', value === 'mods' ? location.pathname : '#' + value))">
+        <nav class="flex items-center gap-1 mb-6 border-b border-gray-200 dark:border-gray-800" aria-label="Build sections">
+            @foreach (['mods' => 'Mods', 'health' => 'Health', 'updates' => 'Updates'] as $key => $title)
+                <button type="button" @click="tab = '{{ $key }}'"
+                        class="relative px-3 py-2 text-sm transition-colors"
+                        :class="tab === '{{ $key }}' ? 'text-gray-950 dark:text-white' : 'text-gray-500 hover:text-gray-950 dark:hover:text-white'"
+                        :aria-current="tab === '{{ $key }}' ? 'page' : null">
+                    {{ $title }}
+                    <span x-show="tab === '{{ $key }}'" class="absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-gray-950 dark:bg-white"></span>
+                </button>
+            @endforeach
+        </nav>
+
+        {{-- Mods --}}
+        <div x-show="tab === 'mods'">
+            @if ($build->isLive())
+                <div x-data="{ showPanels: false }">
+                    <div class="ui-alert ui-alert-warning p-4 mb-6">
+                        <p>This build is published and public. <strong>Changes reach players the next time they launch.</strong></p>
+                        <p x-show="!showPanels" class="mt-2">
+                            Editing is hidden to avoid accidents.
+                            <button type="button" @click="showPanels = true" class="underline font-medium">Show the editor</button>
+                        </p>
+                    </div>
+                    <template x-if="showPanels">
+                        <div>@include('modpack.build._edit-panels')</div>
+                    </template>
+                </div>
+            @else
+                @include('modpack.build._edit-panels')
+            @endif
+        </div>
+
+        {{-- Health --}}
+        <section x-show="tab === 'health'" x-cloak class="ui-card overflow-hidden"
+                 x-data="{
+                     state: 'idle',
+                     issues: [],
+                     checked: 0,
+                     get errors() { return this.issues.filter(issue => issue.severity === 'error').length },
+                     async run() {
+                         this.state = 'loading';
+                         try {
+                             const data = await window.ajax(@js(route('modpack.build.health', ['build_id' => $build->id])));
+                             this.issues = data.issues;
+                             this.checked = data.checked;
+                             this.state = 'done';
+                         } catch (e) {
+                             this.state = 'error';
+                         }
+                     },
+                 }"
+                 x-init="$watch('tab', value => { if (value === 'health' && state === 'idle') run() }); if (tab === 'health') run()">
+            <div class="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-gray-200 dark:border-gray-800">
+                <div>
+                    <h2 class="section-title">Build health</h2>
+                    <p class="text-xs text-gray-500 mt-0.5">Missing files, wrong loader or Minecraft version, missing dependencies and duplicates.</p>
+                </div>
+                <button type="button" class="ui-btn ui-btn-sm ui-btn-secondary" @click="run()" :disabled="state === 'loading'"
+                        x-text="state === 'loading' ? 'Checking…' : 'Check again'">Check again</button>
+            </div>
+            <p x-show="state === 'loading'" class="px-5 py-12 text-center text-sm text-gray-500">Reading every jar in this build…</p>
+            <p x-show="state === 'error'" class="px-5 py-12 text-center text-sm text-red-600 dark:text-red-400">The check failed. Try again.</p>
+            <div x-show="state === 'done' && issues.length === 0" class="px-5 py-12 text-center">
+                <p class="text-sm font-medium text-gray-950 dark:text-white">No problems found</p>
+                <p class="mt-1 text-sm text-gray-500" x-text="'Checked ' + checked + ' mod versions.'"></p>
+            </div>
+            <ul x-show="state === 'done' && issues.length" class="divide-y divide-gray-100 dark:divide-gray-900">
+                <template x-for="(issue, index) in issues" :key="index">
+                    <li class="flex items-start gap-3 px-5 py-3 text-sm">
+                        <span class="mt-1.5 size-2 shrink-0 rounded-full" :class="issue.severity === 'error' ? 'bg-red-500' : 'bg-amber-500'"></span>
+                        <div class="min-w-0">
+                            <p class="text-gray-950 dark:text-white" x-text="issue.message"></p>
+                            <p class="text-xs text-gray-500" x-show="issue.mod" x-text="issue.mod"></p>
+                        </div>
+                    </li>
+                </template>
+            </ul>
+        </section>
+
+        {{-- Updates --}}
+        <section x-show="tab === 'updates'" x-cloak class="ui-card overflow-hidden"
+                 x-data="{
+                     state: 'idle',
+                     updates: [],
+                     selected: [],
+                     version: @js(old('version', preg_replace_callback('/(\d+)(?!.*\d)/', fn ($match) => $match[1] + 1, $build->version))),
+                     async run() {
+                         this.state = 'loading';
+                         try {
+                             const data = await window.ajax(@js(route('modpack.build.updates', ['build_id' => $build->id])));
+                             this.updates = data.updates;
+                             this.selected = data.updates.map(update => String(update.modversion_id));
+                             this.state = 'done';
+                         } catch (e) {
+                             this.state = 'error';
+                         }
+                     },
+                 }"
+                 x-init="$watch('tab', value => { if (value === 'updates' && state === 'idle') run() }); if (tab === 'updates') run()">
+            <form method="POST" action="{{ route('modpack.build.updates', ['build_id' => $build->id]) }}">
+                @csrf
+                <div class="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-gray-200 dark:border-gray-800">
+                    <div>
+                        <h2 class="section-title">Updates</h2>
+                        <p class="text-xs text-gray-500 mt-0.5">Newer versions of mods imported from Modrinth, CurseForge and the loader sites, for Minecraft {{ $build->minecraft }}.</p>
+                    </div>
+                    <button type="button" class="ui-btn ui-btn-sm ui-btn-secondary" @click="run()" :disabled="state === 'loading'"
+                            x-text="state === 'loading' ? 'Checking…' : 'Check again'">Check again</button>
+                </div>
+                <p x-show="state === 'loading'" class="px-5 py-12 text-center text-sm text-gray-500">Asking the mod providers for newer versions…</p>
+                <p x-show="state === 'error'" class="px-5 py-12 text-center text-sm text-red-600 dark:text-red-400">The check failed. Try again.</p>
+                <div x-show="state === 'done' && updates.length === 0" class="px-5 py-12 text-center">
+                    <p class="text-sm font-medium text-gray-950 dark:text-white">Everything is up to date</p>
+                    <p class="mt-1 text-sm text-gray-500">Mods added by hand can't be checked; import them from a provider to track updates.</p>
+                </div>
+                <div x-show="state === 'done' && updates.length">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="ui-table-head">
+                                    <th class="pl-5 pr-2 py-3 w-8">
+                                        <input type="checkbox" class="ui-checkbox" aria-label="Select all"
+                                               :checked="selected.length === updates.length"
+                                               @change="selected = $event.target.checked ? updates.map(update => String(update.modversion_id)) : []">
+                                    </th>
+                                    <th class="px-3 py-3">Mod</th>
+                                    <th class="px-3 py-3">Current</th>
+                                    <th class="px-3 py-3">Available</th>
+                                    <th class="px-5 py-3 hidden sm:table-cell">Source</th>
+                                </tr>
+                            </thead>
+                            <tbody class="ui-table-body">
+                                <template x-for="update in updates" :key="update.modversion_id">
+                                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-900/50">
+                                        <td class="pl-5 pr-2 py-2.5">
+                                            <input type="checkbox" name="modversions[]" class="ui-checkbox" :value="String(update.modversion_id)" x-model="selected" :aria-label="'Update ' + update.name">
+                                        </td>
+                                        <td class="px-3 py-2.5 font-medium text-gray-950 dark:text-white" x-text="update.name"></td>
+                                        <td class="px-3 py-2.5 font-mono text-xs text-gray-500" x-text="update.current"></td>
+                                        <td class="px-3 py-2.5 font-mono text-xs text-gray-950 dark:text-white" x-text="update.latest_label"></td>
+                                        <td class="px-5 py-2.5 text-xs text-gray-500 hidden sm:table-cell" x-text="update.provider"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-3 px-5 py-4 border-t border-gray-200 dark:border-gray-800">
+                        <div>
+                            <label for="update-version" class="ui-label">New build version</label>
+                            <input id="update-version" name="version" x-model="version" class="ui-control sm:w-48 font-mono" required>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <p class="text-xs text-gray-500 max-w-xs">Creates a new unpublished build; this one stays as it is.</p>
+                            <button type="submit" class="ui-btn ui-btn-primary" :disabled="!selected.length || !version"
+                                    x-text="'Create build with ' + selected.length + ' update' + (selected.length === 1 ? '' : 's')">Create build</button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </section>
+    </div>
 @endsection
 
 @push('scripts')

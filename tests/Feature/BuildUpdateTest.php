@@ -144,6 +144,19 @@ final class BuildUpdateTest extends TestCase
         $this->assertSame(['fabric-loader' => '1.20.1-0.14.9', 'handmade' => '1.0', 'sodium' => '1.20.1-0.5.0'], $versions($this->build));
     }
 
+    public function test_build_page_offers_compare_health_and_updates(): void
+    {
+        $response = $this->get("/modpack/build/{$this->build->id}");
+
+        $response->assertOk();
+        $response->assertSee(route('modpack.build.compare', ['build_id' => $this->build->id]), false);
+        // The status endpoints are embedded with @js(), which escapes slashes
+        $response->assertSee(str_replace('/', '\/', route('modpack.build.health', ['build_id' => $this->build->id])), false);
+        $response->assertSee(str_replace('/', '\/', route('modpack.build.updates', ['build_id' => $this->build->id])), false);
+        // Suggested version for the updated build
+        $response->assertSee('1.0.1');
+    }
+
     public function test_new_build_version_must_be_unused(): void
     {
         $response = $this->post("/modpack/build/{$this->build->id}/updates", [

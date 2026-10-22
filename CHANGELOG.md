@@ -9,6 +9,12 @@ All notable changes to Technic Solder will be documented in this file.
 - Export builds as a client zip, a server zip (with the Forge/NeoForge installer and setup notes), a Modrinth `.mrpack` or a CurseForge zip from the build page's Export menu. Modrinth exports link mods hosted on Modrinth by hash instead of bundling them.
 - Back up a modpack with all of its builds as a Solder JSON file and restore it from Import modpack.
 - Modpack imports now add the pack's mod loader to the build, keep its bundled configs and other override files as a `<modpack>-overrides` mod, place resource and shader packs in the right folders and skip server-only files.
+- Build updates: mod versions imported from Modrinth, CurseForge or a loader site remember where they came from. A build's Updates tab lists newer versions for its Minecraft version and loader and creates a new build with the chosen updates. CurseForge exports reference these mods by ID instead of bundling them.
+- Build health: a build's Health tab reports missing files, a missing or duplicate mod loader, mods for another loader or Minecraft version, missing required dependencies and mods included twice.
+- Compare any two builds of a modpack and copy the differences as a Markdown changelog.
+- Upload mod `.jar` files to create mods from their metadata, or add `.jar` and Solder `.zip` files as new versions of a mod.
+- Settings → Repository checks every mod version's file against its stored checksum and can update checksums for files that were replaced on purpose.
+- Modpack imports, build exports, build updates and repository checks run as background jobs with a progress page when a queue worker is running. The Docker stacks include a `worker` service; set `QUEUE_CONNECTION=redis` (Docker) or `database` to use it. Run `php artisan migrate` for the new queue tables and mod version source columns.
 
 ### Fixed
 

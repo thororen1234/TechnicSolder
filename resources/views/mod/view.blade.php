@@ -3,72 +3,129 @@
     <title>{{ $mod->pretty_name ?: $mod->name }} - Technic Solder</title>
 @stop
 @section('content')
-    <div class="mb-6">
-        <h1 class="text-2xl font-bold">Mod Library</h1>
-    </div>
-
-    <div class="ui-card"
-         x-data="modView()">
-        <div class="ui-card-header">
-            <h2 class="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                @if (!empty($mod->pretty_name))
-                    {{ $mod->pretty_name }}
-                    <span class="text-gray-500 dark:text-gray-400 font-normal">{{ $mod->name }}</span>
-                @else
-                    {{ $mod->name }}
-                @endif
-            </h2>
-        </div>
-        <div class="p-5">
-            {{-- Tabs --}}
-            <div class="flex gap-1 mb-6 border-b border-gray-200 dark:border-gray-800">
-                <button @click="tab = 'versions'"
-                        :class="tab === 'versions'
-                            ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
-                            : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'"
-                        class="px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors">
-                    Versions
-                </button>
-                <button @click="tab = 'details'"
-                        :class="tab === 'details'
-                            ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
-                            : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'"
-                        class="px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors">
-                    Details
-                </button>
+    <div x-data="modView()">
+        <div class="page-header">
+            <div class="min-w-0">
+                <a href="{{ url('mod/list') }}" class="text-sm text-gray-500 hover:text-gray-950 dark:hover:text-white">Mods</a>
+                <h1 class="page-title truncate">{{ $mod->pretty_name ?: $mod->name }}</h1>
+                <p class="mt-1 flex items-center gap-2 flex-wrap text-sm text-gray-500">
+                    <span class="font-mono text-xs">{{ $mod->name }}</span>
+                    @if ($mod->author)
+                        <span class="text-gray-300 dark:text-gray-700">·</span>
+                        <span>{{ $mod->author }}</span>
+                    @endif
+                    @if ($mod->link)
+                        <span class="text-gray-300 dark:text-gray-700">·</span>
+                        <a href="{{ $mod->link }}" target="_blank" rel="noopener noreferrer" class="hover:text-gray-950 dark:hover:text-white">Website ↗</a>
+                    @endif
+                </p>
             </div>
+            <div class="flex items-center gap-2 shrink-0">
+                <button type="button" @click="tab = 'details'" class="ui-btn ui-btn-secondary">Edit details</button>
+                <a href="{{ url('/mod/delete/'.$mod->id) }}" class="ui-btn ui-btn-secondary hover:text-red-600! dark:hover:text-red-400!">Delete</a>
+            </div>
+        </div>
 
-            {{-- Versions Tab --}}
-            <div x-show="tab === 'versions'">
-                <div class="p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 mb-5">
-                    <p class="text-sm text-gray-700 dark:text-gray-300 mb-2">
-                        Solder currently does not support uploading files directly to it. Your repository still needs to
-                        exist and follow a strict directory structure. When you add versions the URL will be verified to
-                        make sure the file exists before it is added to Solder.
-                    </p>
-                    <p class="text-sm font-mono text-gray-800 dark:text-gray-200">
-                        mods/<span class="text-blue-600 dark:text-blue-400">{{ $mod->name }}</span>/<span class="text-blue-600 dark:text-blue-400">{{ $mod->name }}</span>-[version].zip
-                    </p>
+        @session('success')
+            <div class="ui-alert ui-alert-success mb-6 p-4">{{ $value }}</div>
+        @endsession
+        @if ($errors->any())
+            <div class="ui-alert ui-alert-danger mb-6 p-4 space-y-1">
+                @foreach ($errors->all() as $error)
+                    <p>{{ $error }}</p>
+                @endforeach
+            </div>
+        @endif
+
+        <div class="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-8">
+            <div class="ui-stat">
+                <p class="ui-stat-label">Versions</p>
+                <p class="ui-stat-value" x-text="rows.length">{{ $mod->versions->count() }}</p>
+            </div>
+            <div class="ui-stat">
+                <p class="ui-stat-label">Used in builds</p>
+                <p class="ui-stat-value" x-text="rows.reduce((total, row) => total + row.builds.length + row.hiddenCount, 0)">&nbsp;</p>
+            </div>
+            <div class="ui-stat col-span-2 lg:col-span-1">
+                <p class="ui-stat-label">Files live in</p>
+                <p class="mt-1.5 font-mono text-xs text-gray-950 dark:text-white truncate" title="mods/{{ $mod->name }}/">mods/{{ $mod->name }}/{{ $mod->name }}-[version].zip</p>
+            </div>
+        </div>
+
+        <nav class="flex items-center gap-1 mb-6 border-b border-gray-200 dark:border-gray-800" aria-label="Mod sections">
+            @foreach (['versions' => 'Versions', 'details' => 'Details'] as $key => $title)
+                <button type="button" @click="tab = '{{ $key }}'"
+                        class="relative px-3 py-2 text-sm transition-colors"
+                        :class="tab === '{{ $key }}' ? 'text-gray-950 dark:text-white' : 'text-gray-500 hover:text-gray-950 dark:hover:text-white'"
+                        :aria-current="tab === '{{ $key }}' ? 'page' : null">
+                    {{ $title }}
+                    <span x-show="tab === '{{ $key }}'" class="absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-gray-950 dark:bg-white"></span>
+                </button>
+            @endforeach
+        </nav>
+
+        {{-- Versions --}}
+        <div x-show="tab === 'versions'" id="versions">
+            <section class="ui-card mb-6" x-data="{ mode: 'upload', uploading: false, files: 0 }">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-3.5 border-b border-gray-200 dark:border-gray-800">
+                    <h2 class="section-title">Add versions</h2>
+                    <div class="inline-flex p-0.5 rounded-lg bg-gray-100 dark:bg-gray-900 text-sm">
+                        <button type="button" @click="mode = 'upload'" class="px-3 py-1 rounded-md transition-colors"
+                                :class="mode === 'upload' ? 'bg-white dark:bg-gray-800 text-gray-950 dark:text-white shadow-xs' : 'text-gray-500'">Upload files</button>
+                        <button type="button" @click="mode = 'existing'" class="px-3 py-1 rounded-md transition-colors"
+                                :class="mode === 'existing' ? 'bg-white dark:bg-gray-800 text-gray-950 dark:text-white shadow-xs' : 'text-gray-500'">File already in repository</button>
+                    </div>
                 </div>
 
-                @if ($errors->all())
-                    <div class="ui-alert ui-alert-danger mb-4 p-4">
-                        @foreach ($errors->all() as $error)
-                            {{ $error }}<br />
-                        @endforeach
+                <form x-show="mode === 'upload'" method="POST" action="{{ route('mod.upload_versions', ['mod_id' => $mod->id]) }}" enctype="multipart/form-data"
+                      class="p-5 flex flex-col sm:flex-row sm:items-end gap-3" @submit="uploading = true">
+                    @csrf
+                    <div class="flex-1">
+                        <label for="upload-files" class="ui-label">.jar or Solder .zip files</label>
+                        <input type="file" id="upload-files" name="files[]" accept=".jar,.zip" multiple class="ui-file" @change="files = $event.target.files.length">
                     </div>
-                @endif
+                    <div class="sm:w-48" x-show="files <= 1">
+                        <label for="upload-version" class="ui-label">Version <span class="text-gray-400 font-normal">(optional)</span></label>
+                        <input type="text" id="upload-version" name="version" placeholder="Read from the jar" class="ui-control font-mono">
+                    </div>
+                    <button type="submit" class="ui-btn ui-btn-primary" :disabled="!files || uploading" x-text="uploading ? 'Uploading…' : 'Upload'">Upload</button>
+                </form>
 
-                <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
-                    <div class="w-full sm:w-auto sm:flex-1">
-                        @include('partial.data-table.toolbar', ['placeholder' => 'Search versions...', 'showPageSize' => false, 'embedded' => true])
+                <div x-show="mode === 'existing'" x-cloak class="p-5">
+                    <p class="text-sm text-gray-500 mb-3">
+                        Register a zip you already placed in the repository at
+                        <span class="font-mono text-xs text-gray-950 dark:text-white">mods/{{ $mod->name }}/{{ $mod->name }}-[version].zip</span>.
+                        Solder checks the file exists before adding it.
+                    </p>
+                    <div class="flex flex-col sm:flex-row sm:items-end gap-3">
+                        <div class="flex-1">
+                            <label for="add-version" class="ui-label">Version</label>
+                            <input type="text" id="add-version" x-model="addVersion" placeholder="1.20.1-2.0.0" class="ui-control font-mono">
+                        </div>
+                        <div class="flex-1">
+                            <label for="add-md5" class="ui-label">MD5 <span class="text-gray-400 font-normal">(optional)</span></label>
+                            <input type="text" id="add-md5" x-model="addMd5" placeholder="Calculated from the file" class="ui-control font-mono">
+                        </div>
+                        <button type="button" @click="submitAddVersion()" :disabled="addLoading || !addVersion" class="ui-btn ui-btn-primary">
+                            <span x-show="!addLoading">Add version</span>
+                            <span x-show="addLoading">Adding…</span>
+                        </button>
                     </div>
-                    <button @click="rehashAllRunning ? rehashAllAborted = true : rehashAll()"
-                            :disabled="rows.length === 0"
-                            class="ui-btn ui-btn-primary text-xs disabled:opacity-50 disabled:cursor-not-allowed">
-                        <span x-show="!rehashAllRunning">Rehash All</span>
-                        <span x-show="rehashAllRunning && !rehashAllAborted" x-text="'Rehashing ' + rehashAllCurrent + '/' + rehashAllTotal + '... (click to cancel)'"></span>
-                        <span x-show="rehashAllAborted">Cancelling...</span>
+                    <p x-show="addVersion" class="mt-2 text-xs text-gray-500">Will be served from <a :href="addUrl" target="_blank" class="font-mono hover:text-gray-950 dark:hover:text-white break-all" x-text="addUrl"></a></p>
+                </div>
+            </section>
+
+            <section class="ui-card overflow-hidden">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-3.5 border-b border-gray-200 dark:border-gray-800">
+                    <div class="relative sm:w-72">
+                        <svg class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/></svg>
+                        <input type="text" x-model.debounce.150ms="search" placeholder="Filter versions…" class="ui-control py-1.5 pl-9">
+                    </div>
+                    <button @click="rehashAllRunning ? rehashAllAborted = true : rehashAll()" :disabled="rows.length === 0"
+                            class="ui-btn ui-btn-sm ui-btn-secondary" title="Recalculate the checksum and size of every version from its file">
+                        <span x-show="!rehashAllRunning">Rehash all</span>
+                        <span x-show="rehashAllRunning && !rehashAllAborted" x-text="'Rehashing ' + rehashAllCurrent + '/' + rehashAllTotal + ' (click to cancel)'"></span>
+                        <span x-show="rehashAllAborted">Cancelling…</span>
                     </button>
                 </div>
 
@@ -76,264 +133,168 @@
                     <table class="w-full text-sm">
                         <thead>
                             <tr class="ui-table-head">
-                                <th class="px-5 py-3 w-8"></th>
+                                <th class="pl-5 pr-1 py-3 w-8"><span class="sr-only">Details</span></th>
                                 @include('partial.data-table.sort-header', ['key' => 'version', 'label' => 'Version'])
-                                <th class="px-5 py-3" style="width: 25%">MD5</th>
-                                <th class="px-5 py-3" style="width: 30%">Download URL</th>
-                                <th class="px-5 py-3" style="width: 10%">Filesize</th>
-                                <th class="px-5 py-3" style="width: 15%"></th>
+                                <th class="px-3 py-3">MD5</th>
+                                <th class="px-3 py-3 hidden sm:table-cell">Size</th>
+                                <th class="px-5 py-3"><span class="sr-only">Actions</span></th>
                             </tr>
                         </thead>
-                        <tbody class="ui-table-body">
-                            {{-- Add version row (pinned) --}}
-                            <tr class="bg-blue-50/50 dark:bg-blue-900/10">
-                                <td class="px-5 py-3"></td>
-                                <td class="px-5 py-3">
-                                    <input type="text"
-                                           x-model="addVersion"
-                                           placeholder="Version"
-                                           class="ui-control">
-                                </td>
-                                <td class="px-5 py-3">
-                                    <input type="text"
-                                           x-model="addMd5"
-                                           placeholder="MD5 (optional)"
-                                           class="ui-control">
-                                </td>
-                                <td class="px-5 py-3">
-                                    <template x-if="addVersion">
-                                        <a :href="addUrl" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline text-xs break-all" x-text="addUrl"></a>
-                                    </template>
-                                    <template x-if="!addVersion">
-                                        <span class="text-gray-400 dark:text-gray-500 text-xs">N/A</span>
-                                    </template>
-                                </td>
-                                <td class="px-5 py-3 text-gray-400 dark:text-gray-500 text-xs">N/A</td>
-                                <td class="px-5 py-3">
-                                    <button @click="submitAddVersion()"
-                                            :disabled="addLoading || !addVersion"
-                                            class="ui-btn ui-btn-sm ui-btn-primary disabled:opacity-50 disabled:cursor-not-allowed">
-                                        <span x-show="!addLoading">Add Version</span>
-                                        <span x-show="addLoading">Adding...</span>
-                                    </button>
-                                </td>
-                            </tr>
-                        </tbody>
-
-                        {{-- Data-driven version rows with inline expand --}}
                         <template x-for="row in paged" :key="row.id">
-                            <tbody class="ui-table-body">
-                                    <tr>
-                                        <td class="px-5 py-3">
-                                            <button @click="toggleExpand(row.id)"
-                                                    type="button"
-                                                    class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
-                                                <svg class="size-4 transition-transform"
-                                                     :class="expandedVersions.includes(row.id) && 'rotate-90'"
-                                                     fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5"/>
-                                                </svg>
+                            <tbody class="border-b border-gray-100 dark:border-gray-900 last:border-0">
+                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-900/50">
+                                    <td class="pl-5 pr-1 py-2.5">
+                                        <button @click="toggleExpand(row.id)" type="button" class="ui-btn-ghost ui-btn-icon" :aria-expanded="expandedVersions.includes(row.id)" :aria-label="'Details for ' + row.version">
+                                            <svg class="size-4 transition-transform" :class="expandedVersions.includes(row.id) && 'rotate-90'" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5"/>
+                                            </svg>
+                                        </button>
+                                    </td>
+                                    <td class="px-5 py-2.5">
+                                        <div class="flex items-center gap-2">
+                                            <span class="font-mono text-gray-950 dark:text-white" x-text="row.version"></span>
+                                            <span x-show="row.provider" class="ui-badge" x-text="row.provider" title="Imported from this provider, so update checks can find newer versions"></span>
+                                            <span x-show="row.builds.length + row.hiddenCount === 0" class="ui-badge text-gray-400!">Unused</span>
+                                        </div>
+                                    </td>
+                                    <td class="px-3 py-2.5">
+                                        <input type="text" :id="'md5-' + row.id" :placeholder="row.md5" :aria-label="'MD5 of ' + row.version"
+                                               class="ui-control py-1 font-mono text-xs min-w-56">
+                                    </td>
+                                    <td class="px-3 py-2.5 text-gray-500 whitespace-nowrap hidden sm:table-cell" x-text="row.filesize"></td>
+                                    <td class="px-5 py-2.5">
+                                        <div class="flex items-center justify-end gap-1">
+                                            <button @click="rehashVersion(row.id)" :disabled="rehashingVersions.includes(row.id)" class="ui-btn ui-btn-sm ui-btn-secondary"
+                                                    title="Save the MD5 you typed, or recalculate it from the file">
+                                                <span x-show="!rehashingVersions.includes(row.id)">Rehash</span>
+                                                <span x-show="rehashingVersions.includes(row.id)">…</span>
                                             </button>
-                                        </td>
-                                        <td class="px-5 py-3 font-medium text-gray-900 dark:text-gray-100" x-text="row.version"></td>
-                                        <td class="px-5 py-3">
-                                            <input type="text"
-                                                   :id="'md5-' + row.id"
-                                                   :placeholder="row.md5"
-                                                   class="ui-control">
-                                        </td>
-                                        <td class="px-5 py-3">
-                                            <a :href="row.url" target="_blank"
-                                               class="text-blue-600 dark:text-blue-400 hover:underline text-xs break-all" x-text="row.url"></a>
-                                        </td>
-                                        <td class="px-5 py-3 text-gray-700 dark:text-gray-300" x-text="row.filesize"></td>
-                                        <td class="px-5 py-3">
-                                            <div class="flex items-center gap-2">
-                                                <button @click="rehashVersion(row.id)"
-                                                        :disabled="rehashingVersions.includes(row.id)"
-                                                        class="ui-btn ui-btn-sm ui-btn-primary disabled:opacity-50 disabled:cursor-not-allowed">
-                                                    <span x-show="!rehashingVersions.includes(row.id)">Rehash</span>
-                                                    <span x-show="rehashingVersions.includes(row.id)">...</span>
-                                                </button>
-                                                <button @click="deleteVersion(row.id)"
-                                                        :disabled="deletingVersions.includes(row.id)"
-                                                        class="ui-btn ui-btn-sm ui-btn-danger disabled:opacity-50 disabled:cursor-not-allowed">
-                                                    Delete
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                    <tr x-show="expandedVersions.includes(row.id)">
-                                        <td colspan="6" class="px-5 py-3 bg-gray-50 dark:bg-gray-800/30">
-                                            <template x-if="row.builds.length === 0 && row.hiddenCount === 0">
-                                                <p class="text-sm text-gray-500 dark:text-gray-400">Not used in any builds</p>
-                                            </template>
-                                            <template x-if="row.builds.length === 0 && row.hiddenCount > 0">
-                                                <p class="text-sm text-gray-500 dark:text-gray-400"
-                                                   x-text="'Used in ' + row.hiddenCount + ' build' + (row.hiddenCount === 1 ? '' : 's') + ' you don\u2019t have access to'"></p>
-                                            </template>
-                                            <template x-if="row.builds.length > 0">
+                                            <button @click="deleteVersion(row.id)" :disabled="deletingVersions.includes(row.id)"
+                                                    class="ui-btn-ghost ui-btn-icon hover:text-red-600! dark:hover:text-red-400!" :aria-label="'Delete ' + row.version" title="Delete version">
+                                                <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"/></svg>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr x-show="expandedVersions.includes(row.id)">
+                                    <td colspan="5" class="px-5 pb-4 pt-1 bg-gray-50/60 dark:bg-gray-900/40">
+                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-5 pl-9">
+                                            <div class="space-y-3 text-sm">
                                                 <div>
-                                                    <p class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Builds used in:</p>
-                                                    <ul class="space-y-1 ml-4">
-                                                        <template x-for="build in row.builds" :key="build.id">
-                                                            <li class="text-sm text-gray-600 dark:text-gray-400">
-                                                                <a :href="'/modpack/view/' + build.modpack_id"
-                                                                   class="text-blue-600 dark:text-blue-400 hover:underline" x-text="build.modpack_name"></a>
-                                                                -
-                                                                <a :href="'/modpack/build/' + build.id"
-                                                                   class="text-blue-600 dark:text-blue-400 hover:underline" x-text="build.version"></a>
-                                                            </li>
-                                                        </template>
-                                                        <template x-if="row.hiddenCount > 0">
-                                                            <li class="text-sm text-gray-400 dark:text-gray-500 italic"
-                                                                x-text="'+ ' + row.hiddenCount + ' other' + (row.hiddenCount === 1 ? '' : 's')"></li>
-                                                        </template>
-                                                    </ul>
+                                                    <p class="ui-stat-label">Download URL</p>
+                                                    <a :href="row.url" target="_blank" class="font-mono text-xs text-gray-700 dark:text-gray-300 hover:text-gray-950 dark:hover:text-white break-all" x-text="row.url"></a>
                                                 </div>
-                                            </template>
-                                            <div class="mt-3">
-                                                <label class="ui-label">Notes</label>
+                                                <div>
+                                                    <p class="ui-stat-label">Used in</p>
+                                                    <template x-if="row.builds.length === 0 && row.hiddenCount === 0">
+                                                        <p class="text-gray-500">No builds</p>
+                                                    </template>
+                                                    <template x-if="row.builds.length === 0 && row.hiddenCount > 0">
+                                                        <p class="text-gray-500" x-text="row.hiddenCount + ' build' + (row.hiddenCount === 1 ? '' : 's') + ' you don’t have access to'"></p>
+                                                    </template>
+                                                    <div class="flex flex-wrap gap-1.5 mt-1" x-show="row.builds.length">
+                                                        <template x-for="build in row.builds" :key="build.id">
+                                                            <a :href="'/modpack/build/' + build.id" class="ui-badge hover:border-gray-300 dark:hover:border-gray-700">
+                                                                <span x-text="build.modpack_name"></span>
+                                                                <span class="font-mono text-gray-500" x-text="build.version"></span>
+                                                            </a>
+                                                        </template>
+                                                        <span x-show="row.hiddenCount > 0" class="text-xs text-gray-400 self-center" x-text="'+ ' + row.hiddenCount + ' other' + (row.hiddenCount === 1 ? '' : 's')"></span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label class="ui-label" :for="'notes-' + row.id">Notes</label>
                                                 <div class="flex gap-2">
-                                                    <textarea x-model="row.notes"
-                                                              rows="2"
-                                                              placeholder="Private notes (not shown in API)"
-                                                              class="ui-control w-auto flex-1"></textarea>
-                                                    <button @click="saveVersionNotes(row)"
-                                                            :disabled="row.savingNotes"
-                                                            class="ui-btn ui-btn-primary self-end px-3 text-xs disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap">
+                                                    <textarea :id="'notes-' + row.id" x-model="row.notes" rows="2" placeholder="Private notes (not shown in the API)" class="ui-control flex-1"></textarea>
+                                                    <button @click="saveVersionNotes(row)" :disabled="row.savingNotes" class="ui-btn ui-btn-sm ui-btn-secondary self-end">
                                                         <span x-show="!row.savingNotes">Save</span>
-                                                        <span x-show="row.savingNotes">...</span>
+                                                        <span x-show="row.savingNotes">…</span>
                                                     </button>
                                                 </div>
                                             </div>
-                                        </td>
-                                    </tr>
+                                        </div>
+                                    </td>
+                                </tr>
                             </tbody>
                         </template>
                     </table>
+                    <p x-show="rows.length === 0" class="px-5 py-12 text-center text-sm text-gray-500">No versions yet. Upload a jar above to add the first one.</p>
+                    <p x-show="rows.length > 0 && filtered.length === 0" class="px-5 py-12 text-center text-sm text-gray-500">No versions match your filter.</p>
                 </div>
-            </div>
+            </section>
+        </div>
 
-            {{-- Details Tab --}}
-            <div x-show="tab === 'details'" x-cloak>
-                @include('partial.form-errors')
-                @session('success')
-                    <div class="ui-alert ui-alert-success mb-4 p-4">
-                        {{ $value }}
-                    </div>
-                @endsession
-
-                <form method="post"
-                      action="{{ url('/mod/modify/'.$mod->id) }}"
-                      accept-charset="UTF-8"
-                      x-data="{
-                          prettyName: @js($mod->pretty_name),
-                          slug: @js($mod->name),
-                          slugManual: true,
-                          updateSlug() {
-                              if (!this.slugManual) {
-                                  this.slug = window.slugify(this.prettyName);
-                              }
-                          },
-                          onSlugInput() {
-                              if (this.slug === '') {
-                                  this.slugManual = false;
-                                  this.updateSlug();
-                              } else {
-                                  this.slugManual = true;
-                              }
-                          },
-                          get slugPreview() {
-                              return this.slug || '[slug]';
+        {{-- Details --}}
+        <div x-show="tab === 'details'" x-cloak>
+            <form method="post" action="{{ url('/mod/modify/'.$mod->id) }}" accept-charset="UTF-8" class="ui-card"
+                  x-data="{
+                      prettyName: @js($mod->pretty_name),
+                      slug: @js($mod->name),
+                      slugManual: true,
+                      updateSlug() {
+                          if (!this.slugManual) {
+                              this.slug = window.slugify(this.prettyName);
                           }
-                      }">
-                    @csrf
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <div class="space-y-4">
-                        <div>
-                            <label for="pretty_name" class="ui-label">Pretty Name</label>
-                            <input type="text"
-                                   name="pretty_name"
-                                   id="pretty_name"
-                                   x-model="prettyName"
-                                   @input="updateSlug()"
-                                   class="ui-control">
+                      },
+                      onSlugInput() {
+                          if (this.slug === '') {
+                              this.slugManual = false;
+                              this.updateSlug();
+                          } else {
+                              this.slugManual = true;
+                          }
+                      },
+                      get slugPreview() {
+                          return this.slug || '[slug]';
+                      }
+                  }">
+                @csrf
+                <div class="p-5 sm:p-6 grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div class="lg:col-span-2 space-y-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label for="pretty_name" class="ui-label">Name</label>
+                                <input type="text" name="pretty_name" id="pretty_name" x-model="prettyName" @input="updateSlug()" class="ui-control">
+                            </div>
+                            <div>
+                                <label for="name" class="ui-label">Slug</label>
+                                <input type="text" name="name" id="name" x-model="slug" @input="onSlugInput()" class="ui-control font-mono">
+                            </div>
                         </div>
-                        <div>
-                            <label for="name" class="ui-label">Slug</label>
-                            <input type="text"
-                                   name="name"
-                                   id="name"
-                                   x-model="slug"
-                                   @input="onSlugInput()"
-                                   class="ui-control">
-                        </div>
-                        <div>
-                            <label for="author" class="ui-label">Author</label>
-                            <input type="text"
-                                   name="author"
-                                   id="author"
-                                   value="{{ $mod->author }}"
-                                   class="ui-control">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label for="author" class="ui-label">Author</label>
+                                <input type="text" name="author" id="author" value="{{ $mod->author }}" class="ui-control">
+                            </div>
+                            <div>
+                                <label for="link" class="ui-label">Website</label>
+                                <input type="text" name="link" id="link" value="{{ $mod->link }}" class="ui-control">
+                            </div>
                         </div>
                         <div>
                             <label for="description" class="ui-label">Description</label>
-                            <textarea name="description"
-                                      id="description"
-                                      rows="5"
-                                      class="ui-control">{{ $mod->description }}</textarea>
+                            <textarea name="description" id="description" rows="4" class="ui-control">{{ $mod->description }}</textarea>
                         </div>
                         <div>
                             <label for="notes" class="ui-label">Notes</label>
-                            <textarea name="notes"
-                                      id="notes"
-                                      rows="3"
-                                      placeholder="Private notes (not shown in API)"
-                                      class="ui-control">{{ $mod->notes }}</textarea>
-                        </div>
-                        <div>
-                            <label for="link" class="ui-label">Website</label>
-                            <input type="text"
-                                   name="link"
-                                   id="link"
-                                   value="{{ $mod->link }}"
-                                   class="ui-control">
+                            <textarea name="notes" id="notes" rows="3" placeholder="Private notes (not shown in the API)" class="ui-control">{{ $mod->notes }}</textarea>
                         </div>
                     </div>
-                    <div>
-                        <div class="p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
-                            <p class="text-sm text-gray-700 dark:text-gray-300 mb-3">
-                                Your mod directory structure must match the slug exactly:
-                            </p>
-                            <div class="bg-gray-100 dark:bg-gray-800 rounded-lg p-3 font-mono text-sm text-gray-800 dark:text-gray-200 mb-3">
-                                <div>mods/<span x-text="slugPreview" class="text-blue-600 dark:text-blue-400"></span>/</div>
-                                <div>mods/<span x-text="slugPreview" class="text-blue-600 dark:text-blue-400"></span>/<span x-text="slugPreview" class="text-blue-600 dark:text-blue-400"></span>-[version].zip</div>
-                            </div>
-                            <p class="text-sm text-gray-600 dark:text-gray-400">
-                                The mod slug automatically updates based on the mod name. You can change the slug to whatever
-                                you want after you set the name. If you modify the slug, it will no longer update
-                                automatically. If you wish to restore that behavior, simply empty the slug field.
-                            </p>
+                    <aside class="text-sm text-gray-500 space-y-3">
+                        <p>The slug names this mod's folder in the repository, so it must match exactly:</p>
+                        <div class="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 p-3 font-mono text-xs text-gray-700 dark:text-gray-300 space-y-1">
+                            <div>mods/<span x-text="slugPreview" class="text-gray-950 dark:text-white"></span>/</div>
+                            <div>mods/<span x-text="slugPreview" class="text-gray-950 dark:text-white"></span>/<span x-text="slugPreview" class="text-gray-950 dark:text-white"></span>-[version].zip</div>
                         </div>
-                    </div>
-                    </div>
-                    <div class="mt-6 flex items-center gap-3">
-                        <button type="submit"
-                                class="ui-btn ui-btn-primary">
-                            Save Changes
-                        </button>
-                        <a href="{{ url('/mod/delete/'.$mod->id) }}"
-                           class="ui-btn ui-btn-danger">
-                            Delete Mod
-                        </a>
-                        <a href="{{ url('/mod/list') }}"
-                           class="ui-btn ui-btn-secondary">
-                            Go Back
-                        </a>
-                    </div>
-                </form>
-            </div>
+                        <p>Clear the slug to have it follow the name again.</p>
+                    </aside>
+                </div>
+                <div class="flex items-center justify-end gap-2 px-5 sm:px-6 py-4 border-t border-gray-200 dark:border-gray-800">
+                    <button type="button" @click="tab = 'versions'" class="ui-btn ui-btn-secondary">Cancel</button>
+                    <button type="submit" class="ui-btn ui-btn-primary">Save changes</button>
+                </div>
+            </form>
         </div>
     </div>
 @endsection
@@ -357,6 +318,7 @@
                         'filesize' => $v->humanFilesize(),
                         'url' => config('solder.mirror_url') . 'mods/' . $mod->name . '/' . $mod->name . '-' . $v->version . '.zip',
                         'notes' => $v->notes ?? '',
+                        'provider' => isset(App\Mods\ModProviders::providers()[$v->provider ?? '']) ? App\Mods\ModProviders::providers()[$v->provider]::name() : null,
                         'savingNotes' => false,
                         'builds' => $builds->where('accessible', true)->values(),
                         'hiddenCount' => $builds->where('accessible', false)->count(),

@@ -1,164 +1,140 @@
-{{-- Add a mod card --}}
-<div class="ui-card mb-6">
-    <div class="ui-card-header">
-        <span class="font-semibold text-gray-900 dark:text-white">Add a mod</span>
+{{-- Add a mod --}}
+<section class="ui-card mb-6" x-data="modSearch()" @mod-removed.window="modsInBuild.delete($event.detail.mod_name)">
+    <div class="ui-card-header flex items-center justify-between gap-3">
+        <h2 class="section-title">Add a mod</h2>
+        <a href="{{ url('mod/import') }}" class="text-xs text-gray-500 hover:text-gray-950 dark:hover:text-white">Not in your library? Import it →</a>
     </div>
-    <div class="p-5" x-data="modSearch()" @mod-removed.window="modsInBuild.delete($event.detail.mod_name)">
-        <div class="flex flex-col sm:flex-row gap-3 items-end">
-            {{-- Mod name searchable select --}}
-            <div class="flex-1 w-full sm:w-auto relative">
-                <label class="ui-label">Mod name</label>
-                <input type="text"
-                       x-ref="modInput"
-                       x-model="query"
-                       @focus="showDropdown = true"
-                       @input="showDropdown = true; modHighlight = -1; if (!query) clearSelection()"
-                       @click.outside="showDropdown = false; modHighlight = -1"
-                       @keydown.escape="showDropdown = false; modHighlight = -1"
-                       @keydown.arrow-down.prevent="modArrow('down')"
-                       @keydown.arrow-up.prevent="modArrow('up')"
-                       @keydown.enter.prevent="if (modHighlight >= 0 && filteredMods[modHighlight]) selectMod(filteredMods[modHighlight])"
-                       placeholder="Search for a mod..."
-                       autocomplete="off"
-                       class="ui-control">
-                {{-- Dropdown --}}
-                <div x-show="showDropdown && filteredMods.length > 0"
-                     x-ref="modDropdown"
-                     x-transition
-                     class="absolute z-20 mt-1 w-full max-h-60 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg"
-                     style="display: none">
-                    <template x-for="(mod, i) in filteredMods" :key="mod.name">
-                        <button type="button" tabindex="-1"
-                                @click="selectMod(mod)"
-                                @mouseenter="modHighlight = i"
-                                class="w-full text-left px-3 py-2 text-sm transition-colors"
-                                :class="i === modHighlight
-                                    ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                                    : 'text-gray-900 dark:text-gray-100 hover:bg-blue-50 dark:hover:bg-blue-900/30'">
-                            <span x-text="mod.pretty_name"></span>
-                            <span x-show="mod.pretty_name !== mod.name"
-                                  class="text-xs text-gray-400 ml-1" x-text="'(' + mod.name + ')'"></span>
-                        </button>
-                    </template>
-                </div>
-            </div>
-
-            {{-- Mod version searchable select --}}
-            <div class="flex-1 w-full sm:w-auto relative" @click.outside="showVersionDropdown = false; versionHighlight = -1; versionQuery = selectedVersion">
-                <label class="ui-label">Mod version</label>
-                <input type="text"
-                       x-ref="versionInput"
-                       x-model="versionQuery"
-                       @focus="versionQuery = ''; showVersionDropdown = true; versionHighlight = -1"
-                       @click="showVersionDropdown = true"
-                       @input="showVersionDropdown = true; versionHighlight = -1"
-                       @keydown.escape="showVersionDropdown = false; versionHighlight = -1; versionQuery = selectedVersion"
-                       @keydown.arrow-down.prevent="versionArrow('down')"
-                       @keydown.arrow-up.prevent="versionArrow('up')"
-                       @keydown.enter.prevent="if (showVersionDropdown && versionHighlight >= 0) { selectVersion(filteredVersions[versionHighlight]); } else if (showVersionDropdown && versionQuery && filteredVersions.length) { selectVersion(filteredVersions[0]); } else if (selectedVersion) { addToBuild().then(ok => ok && $refs.modInput?.focus()); }"
-                       :placeholder="versions.length === 0 ? 'Select a mod first...' : 'Search versions...'"
-                       :disabled="versions.length === 0"
-                       autocomplete="off"
-                       class="ui-control disabled:opacity-50 disabled:cursor-not-allowed">
-                {{-- Dropdown --}}
-                <div x-show="showVersionDropdown && filteredVersions.length > 0"
-                     x-ref="versionDropdown"
-                     x-transition
-                     class="absolute z-20 mt-1 w-full max-h-60 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg"
-                     style="display: none">
-                    <template x-for="(v, i) in filteredVersions" :key="v">
-                        <button type="button" tabindex="-1"
-                                @click="selectVersion(v)"
-                                @mouseenter="versionHighlight = i"
-                                class="w-full text-left px-3 py-2 text-sm transition-colors"
-                                :class="i === versionHighlight
-                                    ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium'
-                                    : 'text-gray-900 dark:text-gray-100 hover:bg-blue-50 dark:hover:bg-blue-900/30'">
-                            <span x-text="v"></span>
-                        </button>
-                    </template>
-                </div>
-            </div>
-
-            {{-- Add button --}}
-            <div class="shrink-0">
-                <button type="button"
-                        @click="addToBuild()"
-                        :disabled="!selectedVersion || loadingVersions"
-                        class="ui-btn ui-btn-primary disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap">
-                    <span x-show="!loadingVersions">Add to build</span>
-                    <span x-show="loadingVersions">Loading...</span>
-                </button>
+    <div class="p-5 flex flex-col sm:flex-row gap-3 items-end">
+        {{-- Mod name searchable select --}}
+        <div class="flex-1 w-full sm:w-auto relative">
+            <label class="ui-label" for="add-mod-name">Mod</label>
+            <input type="text" id="add-mod-name"
+                   x-ref="modInput"
+                   x-model="query"
+                   @focus="showDropdown = true"
+                   @input="showDropdown = true; modHighlight = -1; if (!query) clearSelection()"
+                   @click.outside="showDropdown = false; modHighlight = -1"
+                   @keydown.escape="showDropdown = false; modHighlight = -1"
+                   @keydown.arrow-down.prevent="modArrow('down')"
+                   @keydown.arrow-up.prevent="modArrow('up')"
+                   @keydown.enter.prevent="if (modHighlight >= 0 && filteredMods[modHighlight]) selectMod(filteredMods[modHighlight])"
+                   placeholder="Search your mod library…"
+                   autocomplete="off"
+                   class="ui-control">
+            <div x-show="showDropdown && filteredMods.length > 0"
+                 x-ref="modDropdown"
+                 x-transition.opacity.duration.100ms
+                 class="ui-menu absolute z-20 mt-1 w-full max-h-64 overflow-y-auto"
+                 style="display: none">
+                <template x-for="(mod, i) in filteredMods" :key="mod.name">
+                    <button type="button" tabindex="-1"
+                            @click="selectMod(mod)"
+                            @mouseenter="modHighlight = i"
+                            class="ui-menu-item"
+                            :class="i === modHighlight && 'bg-gray-100! text-gray-950! dark:bg-gray-900! dark:text-white!'">
+                        <span class="truncate" x-text="mod.pretty_name"></span>
+                        <span x-show="mod.pretty_name !== mod.name" class="ml-auto pl-2 font-mono text-xs text-gray-400 truncate" x-text="mod.name"></span>
+                    </button>
+                </template>
             </div>
         </div>
-    </div>
-</div>
 
-{{-- Mod list card --}}
-<div class="ui-card"
-     x-data="modList()"
-     @mod-added.window="addMod($event.detail)">
-    <div class="ui-card-header flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <span class="font-semibold text-gray-900 dark:text-white">Mod List</span>
+        {{-- Mod version searchable select --}}
+        <div class="flex-1 w-full sm:w-auto relative" @click.outside="showVersionDropdown = false; versionHighlight = -1; versionQuery = selectedVersion">
+            <label class="ui-label" for="add-mod-version">Version</label>
+            <input type="text" id="add-mod-version"
+                   x-ref="versionInput"
+                   x-model="versionQuery"
+                   @focus="versionQuery = ''; showVersionDropdown = true; versionHighlight = -1"
+                   @click="showVersionDropdown = true"
+                   @input="showVersionDropdown = true; versionHighlight = -1"
+                   @keydown.escape="showVersionDropdown = false; versionHighlight = -1; versionQuery = selectedVersion"
+                   @keydown.arrow-down.prevent="versionArrow('down')"
+                   @keydown.arrow-up.prevent="versionArrow('up')"
+                   @keydown.enter.prevent="if (showVersionDropdown && versionHighlight >= 0) { selectVersion(filteredVersions[versionHighlight]); } else if (showVersionDropdown && versionQuery && filteredVersions.length) { selectVersion(filteredVersions[0]); } else if (selectedVersion) { addToBuild().then(ok => ok && $refs.modInput?.focus()); }"
+                   :placeholder="versions.length === 0 ? 'Choose a mod first' : 'Search versions…'"
+                   :disabled="versions.length === 0"
+                   autocomplete="off"
+                   class="ui-control font-mono disabled:opacity-50 disabled:cursor-not-allowed">
+            <div x-show="showVersionDropdown && filteredVersions.length > 0"
+                 x-ref="versionDropdown"
+                 x-transition.opacity.duration.100ms
+                 class="ui-menu absolute z-20 mt-1 w-full max-h-64 overflow-y-auto"
+                 style="display: none">
+                <template x-for="(v, i) in filteredVersions" :key="v">
+                    <button type="button" tabindex="-1"
+                            @click="selectVersion(v)"
+                            @mouseenter="versionHighlight = i"
+                            class="ui-menu-item font-mono text-xs"
+                            :class="i === versionHighlight && 'bg-gray-100! text-gray-950! dark:bg-gray-900! dark:text-white!'">
+                        <span x-text="v"></span>
+                    </button>
+                </template>
+            </div>
+        </div>
+
+        <button type="button"
+                @click="addToBuild()"
+                :disabled="!selectedVersion || loadingVersions"
+                class="ui-btn ui-btn-primary shrink-0">
+            <span x-show="!loadingVersions">Add to build</span>
+            <span x-show="loadingVersions">Loading…</span>
+        </button>
+    </div>
+</section>
+
+{{-- Mods in the build --}}
+<section class="ui-card overflow-hidden" x-data="modList()" @mod-added.window="addMod($event.detail)">
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-5 py-3.5 border-b border-gray-200 dark:border-gray-800">
+        <h2 class="section-title">
+            Mods <span class="ml-1 ui-badge tabular-nums" x-text="mods.length"></span>
+        </h2>
         <div class="flex w-full items-center gap-2 sm:w-auto">
             <label for="mod-list-filter" class="sr-only">Filter mods</label>
-            <input type="search"
-                   id="mod-list-filter"
-                   x-model.debounce.200ms="filter"
-                   placeholder="Filter mods..."
-                   class="ui-control w-auto min-w-0 flex-1 sm:w-64 sm:flex-none">
-            <button type="button"
-                    x-show="pendingMods.length > 0"
-                    x-cloak
-                    :disabled="savingAll"
-                    @click="saveAll()"
-                    class="ui-btn ui-btn-sm ui-btn-primary shrink-0 whitespace-nowrap disabled:opacity-50">
-                <span x-show="!savingAll">Save All (<span x-text="pendingMods.length"></span>)</span>
-                <span x-show="savingAll">Saving...</span>
+            <div class="relative flex-1 sm:w-64 sm:flex-none">
+                <svg class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/></svg>
+                <input type="search" id="mod-list-filter" x-model.debounce.200ms="filter" placeholder="Filter mods…" class="ui-control py-1.5 pl-9">
+            </div>
+            <button type="button" x-show="pendingMods.length > 0" x-cloak :disabled="savingAll" @click="saveAll()"
+                    class="ui-btn ui-btn-sm ui-btn-primary-solid shrink-0">
+                <span x-show="!savingAll">Save <span x-text="pendingMods.length"></span> change<span x-show="pendingMods.length !== 1">s</span></span>
+                <span x-show="savingAll">Saving…</span>
             </button>
         </div>
     </div>
-    <div class="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
+    <div class="divide-y divide-gray-100 dark:divide-gray-900 text-sm">
         <template x-for="mod in filteredMods" :key="mod.modversion_id">
-            <div :class="mod.just_added ? 'bg-green-50/50 dark:bg-green-900/10' : ''"
-                 class="flex flex-col sm:flex-row sm:items-center gap-2 px-5 py-3">
-                <div class="sm:w-1/3 shrink-0">
-                    <a :href="'/mod/view/' + mod.mod_id"
-                       class="text-blue-600 dark:text-blue-400 hover:underline font-medium" x-text="mod.pretty_name"></a>
-                    <template x-if="mod.pretty_name !== mod.mod_name">
-                        <span class="text-xs text-gray-500 dark:text-gray-400" x-text="'(' + mod.mod_name + ')'"></span>
-                    </template>
-                    <span x-show="mod.just_added" class="text-xs text-green-600 dark:text-green-400 ml-1">Just added</span>
+            <div class="flex flex-col sm:flex-row sm:items-center gap-2 px-5 py-2.5 transition-colors"
+                 :class="mod.just_added ? 'bg-emerald-50/60 dark:bg-emerald-500/5' : 'hover:bg-gray-50 dark:hover:bg-gray-900/50'">
+                <div class="sm:w-2/5 min-w-0">
+                    <a :href="'/mod/view/' + mod.mod_id" class="font-medium text-gray-950 dark:text-white hover:underline underline-offset-2" x-text="mod.pretty_name"></a>
+                    <span x-show="mod.just_added" class="ml-2 ui-badge ui-badge-success">Added</span>
+                    <p x-show="mod.pretty_name !== mod.mod_name" class="font-mono text-xs text-gray-500 truncate" x-text="mod.mod_name"></p>
                 </div>
-                <div class="flex-1 min-w-0 space-y-2 sm:space-y-0 sm:flex sm:items-center sm:gap-2">
-                    <select x-model="mod.selected_version_id"
-                            class="ui-control sm:w-auto sm:min-w-0 sm:flex-1">
+                <div class="flex flex-1 min-w-0 items-center gap-2">
+                    <select x-model="mod.selected_version_id" class="ui-control py-1.5 font-mono text-xs min-w-0 flex-1"
+                            :class="String(mod.selected_version_id) !== String(mod.modversion_id) && 'border-amber-400! dark:border-amber-500/60!'"
+                            :aria-label="'Version of ' + mod.pretty_name">
                         <template x-for="v in mod.versions" :key="v.id">
                             <option :value="String(v.id)" :selected="String(v.id) === mod.selected_version_id" x-text="v.version"></option>
                         </template>
                     </select>
-                    <div class="flex items-center gap-2 shrink-0">
-                        <button type="button"
-                                :disabled="mod.changing"
-                                @click="changeVersion(mod)"
-                                class="ui-btn ui-btn-sm ui-btn-primary whitespace-nowrap disabled:opacity-50">
-                            Change
-                        </button>
-                        <button type="button"
-                                @click="removeMod(mod)"
-                                class="ui-btn ui-btn-sm ui-btn-danger whitespace-nowrap">
-                            Remove
-                        </button>
-                    </div>
+                    <button type="button" x-show="String(mod.selected_version_id) !== String(mod.modversion_id)"
+                            :disabled="mod.changing" @click="changeVersion(mod)"
+                            class="ui-btn ui-btn-sm ui-btn-secondary shrink-0">Apply</button>
+                    <button type="button" @click="removeMod(mod)" class="ui-btn-ghost ui-btn-icon shrink-0 hover:text-red-600! dark:hover:text-red-400!"
+                            :aria-label="'Remove ' + mod.pretty_name" title="Remove from build">
+                        <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/></svg>
+                    </button>
                 </div>
             </div>
         </template>
 
-        <div x-show="mods.length === 0" x-cloak class="px-5 py-8 text-center text-gray-500 dark:text-gray-400">
-            No mods have been added to this build yet.
+        <div x-show="mods.length === 0" x-cloak class="px-5 py-12 text-center text-gray-500">
+            No mods in this build yet. Add one above.
         </div>
-        <div x-show="mods.length > 0 && filteredMods.length === 0" x-cloak class="px-5 py-8 text-center text-gray-500 dark:text-gray-400">
+        <div x-show="mods.length > 0 && filteredMods.length === 0" x-cloak class="px-5 py-12 text-center text-gray-500">
             No mods match your filter.
         </div>
     </div>
-</div>
+</section>

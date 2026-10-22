@@ -105,6 +105,20 @@ final class ModUploadTest extends TestCase
         $this->assertSame(['mods/iris.jar', 'config/iris.properties'], $this->zipEntries('iris', 'custom-2'));
     }
 
+    public function test_mod_page_offers_uploads_and_shows_where_versions_came_from(): void
+    {
+        $mod = Mod::create(['name' => 'iris', 'pretty_name' => 'Iris']);
+        Modversion::create(['mod_id' => $mod->id, 'version' => '1.7.0', 'md5' => 'x', 'provider' => 'modrinth', 'provider_project_id' => 'YL57xq9U', 'provider_version_id' => 'v1']);
+
+        $response = $this->get("/mod/view/{$mod->id}");
+
+        $response->assertOk();
+        $response->assertSee(route('mod.upload_versions', ['mod_id' => $mod->id]), false);
+        // @js() escapes quotes in the row data it embeds
+        // @js() escapes quotes in the row data it embeds
+        $response->assertSee(str_replace('"', '\u0022', '"provider":"Modrinth"'), false);
+    }
+
     public function test_existing_versions_are_not_overwritten(): void
     {
         $mod = Mod::create(['name' => 'iris', 'pretty_name' => 'Iris']);
