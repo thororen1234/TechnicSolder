@@ -24,6 +24,7 @@ Route::middleware('auth')->group(function () {
     Route::post('client/delete/{client_id}', [ClientController::class, 'postDelete']);
 
     Route::get('dashboard', [DashboardController::class, 'getIndex'])->name('dashboard');
+    Route::post('dashboard/check-updates', [DashboardController::class, 'postCheckUpdates'])->name('dashboard.check_updates');
 
     Route::get('task/{taskId}', [TaskController::class, 'show'])->whereUuid('taskId')->name('task.show');
     Route::get('task/{taskId}/status', [TaskController::class, 'status'])->whereUuid('taskId')->name('task.status');
@@ -94,6 +95,7 @@ Route::middleware('auth')->group(function () {
     Route::get('solder/configure', [SolderController::class, 'getConfigure'])->name('solder.configure');
     Route::get('solder/update', [SolderController::class, 'getUpdate'])->name('solder.update');
     Route::get('solder/activity', [SolderController::class, 'getActivity'])->name('solder.activity');
+    Route::post('solder/notifications/test', [SolderController::class, 'postTestNotification'])->name('solder.notifications.test');
     Route::get('solder/repository', [SolderController::class, 'getRepository'])->name('solder.repository');
     Route::post('solder/repository', [SolderController::class, 'postRepository']);
     Route::post('solder/repository/fix', [SolderController::class, 'postRepositoryFix'])->name('solder.repository.fix');

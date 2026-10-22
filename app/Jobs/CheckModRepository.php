@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Modversion;
+use App\Services\DiscordNotifier;
 use App\Services\ModRepository;
 use App\Services\TaskTracker;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -50,6 +51,15 @@ class CheckModRepository implements ShouldQueue
                 $problems[] = $problem + ['problem' => 'changed', 'message' => 'The file differs from the stored checksum'];
             }
         });
+
+        if ($problems !== []) {
+            DiscordNotifier::send(
+                'Mod repository check found '.count($problems).' '.Str::plural('problem', count($problems)),
+                implode("\n", array_map(fn (array $problem) => "{$problem['mod']} {$problem['version']}: {$problem['message']}", array_slice($problems, 0, 15))),
+                route('solder.repository', ['task' => $this->taskId]),
+                DiscordNotifier::WARNING,
+            );
+        }
 
         TaskTracker::complete($this->taskId, [
             'url' => route('solder.repository', ['task' => $this->taskId]),

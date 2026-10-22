@@ -5,6 +5,7 @@ use App\Http\Middleware\ForceJsonResponse;
 use App\Http\Middleware\RequireMail;
 use App\Http\Middleware\SecurityHeaders;
 use App\Providers\AppServiceProvider;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -17,6 +18,11 @@ return Application::configure(basePath: dirname(__DIR__))
         api: __DIR__.'/../routes/api.php',
         health: '/up',
     )
+    ->withSchedule(function (Schedule $schedule): void {
+        if (config('solder.scheduled_update_checks')) {
+            $schedule->command('solder:check-updates')->dailyAt('04:00')->withoutOverlapping();
+        }
+    })
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->trustProxies(at: '*');
 

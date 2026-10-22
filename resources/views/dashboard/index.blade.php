@@ -22,6 +22,50 @@
             {{ $value }}
         </div>
     @endsession
+    @session('success')
+        <div class="ui-alert ui-alert-success mb-6 p-4">{{ $value }}</div>
+    @endsession
+
+    {{-- Mod updates found by the last check --}}
+    <section class="ui-card mb-8 overflow-hidden">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-3.5">
+            <div class="flex items-center gap-2.5">
+                @if ($updateSummary && $updateSummary['builds'])
+                    <span class="size-2 rounded-full bg-amber-500"></span>
+                    <h2 class="section-title">
+                        {{ count($updateSummary['builds']) }} {{ Str::plural('modpack', count($updateSummary['builds'])) }} {{ count($updateSummary['builds']) === 1 ? 'has' : 'have' }} mod updates
+                    </h2>
+                @elseif ($updateSummary)
+                    <span class="size-2 rounded-full bg-emerald-500"></span>
+                    <h2 class="section-title">Every modpack is up to date</h2>
+                @else
+                    <span class="size-2 rounded-full bg-gray-300 dark:bg-gray-700"></span>
+                    <h2 class="section-title">Mod updates haven't been checked yet</h2>
+                @endif
+            </div>
+            <form method="POST" action="{{ route('dashboard.check_updates') }}" class="flex items-center gap-3">
+                @csrf
+                @if ($updateSummary)
+                    <span class="text-xs text-gray-500">Checked {{ \Illuminate\Support\Carbon::parse($updateSummary['checked_at'])->diffForHumans() }}</span>
+                @endif
+                <button type="submit" class="ui-btn ui-btn-sm ui-btn-secondary">Check now</button>
+            </form>
+        </div>
+        @if ($updateSummary && $updateSummary['builds'])
+            <ul class="divide-y divide-gray-100 dark:divide-gray-900 border-t border-gray-200 dark:border-gray-800">
+                @foreach ($updateSummary['builds'] as $outdated)
+                    <li>
+                        <a href="{{ url('modpack/build/'.$outdated['build_id'].'#updates') }}" class="flex items-center gap-3 px-5 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-900/50">
+                            <span class="font-medium text-gray-950 dark:text-white">{{ $outdated['modpack'] }}</span>
+                            <span class="font-mono text-xs text-gray-500">{{ $outdated['build'] }}</span>
+                            <span class="hidden md:inline text-xs text-gray-500 truncate">{{ implode(', ', $outdated['mods']) }}</span>
+                            <span class="ml-auto ui-badge ui-badge-warning shrink-0">{{ $outdated['count'] }} {{ Str::plural('update', $outdated['count']) }}</span>
+                        </a>
+                    </li>
+                @endforeach
+            </ul>
+        @endif
+    </section>
 
     {{-- Stats --}}
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Build;
+use App\Models\Modpack;
 use App\Models\Modversion;
 use App\Mods\ImportedModData;
 use App\Mods\ModProvider;
@@ -34,6 +35,53 @@ class BuildUpdateService
      * @param  (Closure(int $done, int $total, string $message): void)|null  $progress
      */
     public function __construct(private ?Closure $progress = null) {}
+
+    /** Where the latest results of checkAllModpacks() are kept for the dashboard */
+    public const SUMMARY_CACHE_KEY = 'solder-update-summary';
+
+    /**
+     * Check the latest build of every modpack (the one marked Latest, or else the newest) and remember the results.
+     *
+     * @return array{checked_at: string, builds: list<array{modpack_id: int, modpack: string, build_id: int, build: string, count: int, mods: list<string>}>}
+     */
+    public function checkAllModpacks(): array
+    {
+        $modpacks = Modpack::with('builds')->orderBy('name')->get();
+        $builds = [];
+
+        foreach ($modpacks->values() as $index => $modpack) {
+            $build = $modpack->builds->firstWhere('version', $modpack->latest) ?? $modpack->builds->sortByDesc('id')->first();
+            if ($build === null) {
+                continue;
+            }
+
+            $this->report($index, $modpacks->count(), "Checking {$modpack->name} {$build->version}");
+
+            try {
+                $updates = $this->check($build);
+            } catch (\Throwable $e) {
+                report($e);
+
+                continue;
+            }
+
+            if ($updates !== []) {
+                $builds[] = [
+                    'modpack_id' => $modpack->id,
+                    'modpack' => $modpack->name,
+                    'build_id' => $build->id,
+                    'build' => $build->version,
+                    'count' => count($updates),
+                    'mods' => array_column($updates, 'name'),
+                ];
+            }
+        }
+
+        $summary = ['checked_at' => now()->toIso8601String(), 'builds' => $builds];
+        Cache::forever(self::SUMMARY_CACHE_KEY, $summary);
+
+        return $summary;
+    }
 
     /**
      * Mods in the build with a newer version available. Mods added by hand (with no provider) are skipped.

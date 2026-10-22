@@ -89,4 +89,19 @@ return [
      */
     'curseforge_api_key' => env('CURSEFORGE_API_KEY'),
 
+    /**
+     * Discord Webhook
+     *
+     * When set, Solder posts here when updates are found for a build, an import finishes,
+     * a build is published or the repository check finds problems.
+     */
+    'discord_webhook' => env('SOLDER_DISCORD_WEBHOOK'),
+
+    /**
+     * Nightly Update Checks
+     *
+     * Check the latest build of every modpack for mod updates each night (needs the scheduler running).
+     */
+    'scheduled_update_checks' => filter_var(env('SOLDER_SCHEDULED_UPDATE_CHECKS', 'true'), FILTER_VALIDATE_BOOLEAN),
+
 ];

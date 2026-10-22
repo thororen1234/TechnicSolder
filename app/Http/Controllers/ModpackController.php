@@ -18,6 +18,7 @@ use App\Models\Modpack;
 use App\Models\Modversion;
 use App\Services\BuildHealthService;
 use App\Services\BuildUpdateService;
+use App\Services\DiscordNotifier;
 use App\Services\PackExportService;
 use App\Services\TaskTracker;
 use Illuminate\Http\JsonResponse;
@@ -1071,6 +1072,9 @@ class ModpackController extends Controller
 
                 $state = $build->is_published ? 'published' : 'unpublished';
                 ActivityLog::record('build.'.$state, ucfirst($state)." build {$build->version}", build: $build);
+                if ($build->is_published) {
+                    DiscordNotifier::send("{$build->modpack->name} {$build->version} published", 'Published by '.Auth::user()->username.'.', url('modpack/build/'.$build->id), DiscordNotifier::SUCCESS);
+                }
 
                 return response()->json([
                     'success' => 'Build '.$build->version.' is now '.$state,

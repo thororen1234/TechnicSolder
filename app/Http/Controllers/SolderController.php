@@ -7,6 +7,7 @@ use App\Libraries\MinecraftUtils;
 use App\Libraries\UpdateUtils;
 use App\Models\ActivityLog;
 use App\Models\Modversion;
+use App\Services\DiscordNotifier;
 use App\Services\ModRepository;
 use App\Services\TaskTracker;
 use Exception;
@@ -23,6 +24,19 @@ class SolderController extends Controller
     public function getConfigure()
     {
         return view('solder.configure');
+    }
+
+    public function postTestNotification(): RedirectResponse
+    {
+        if (! DiscordNotifier::isConfigured()) {
+            return redirect('solder/configure')->withErrors(['Set SOLDER_DISCORD_WEBHOOK in your .env file first.']);
+        }
+
+        $sent = DiscordNotifier::send('Test message from Technic Solder', 'Notifications are working.', url('dashboard'), DiscordNotifier::SUCCESS);
+
+        return $sent
+            ? redirect('solder/configure')->with('success', 'Test message sent to Discord.')
+            : redirect('solder/configure')->withErrors(['Discord did not accept the message. Check the webhook URL; details are in the log.']);
     }
 
     /**

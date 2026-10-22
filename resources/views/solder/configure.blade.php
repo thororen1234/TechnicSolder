@@ -86,6 +86,42 @@
         </div>
     </div>
 
+    {{-- Notifications --}}
+    <div class="ui-card mt-6">
+        <div class="ui-card-header">
+            <h2 class="section-title">Notifications</h2>
+        </div>
+        <div class="p-5 space-y-4 text-sm">
+            @session('success')
+                <div class="ui-alert ui-alert-success p-3">{{ $value }}</div>
+            @endsession
+            @include('partial.form-errors')
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                    <p class="flex items-center gap-2 font-medium text-gray-950 dark:text-white">
+                        <span class="size-2 rounded-full {{ App\Services\DiscordNotifier::isConfigured() ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-700' }}"></span>
+                        Discord webhook {{ App\Services\DiscordNotifier::isConfigured() ? 'configured' : 'not configured' }}
+                    </p>
+                    <p class="mt-1 text-gray-500">
+                        Posts mod updates found by the nightly check, finished imports, published builds and repository problems.
+                        Set <span class="font-mono text-xs">SOLDER_DISCORD_WEBHOOK</span> in your .env file.
+                    </p>
+                </div>
+                @if (App\Services\DiscordNotifier::isConfigured())
+                    <form method="POST" action="{{ route('solder.notifications.test') }}">
+                        @csrf
+                        <button type="submit" class="ui-btn ui-btn-sm ui-btn-secondary">Send test message</button>
+                    </form>
+                @endif
+            </div>
+            <p class="text-gray-500">
+                Nightly update checks are {{ config('solder.scheduled_update_checks') ? 'on' : 'off' }}
+                (<span class="font-mono text-xs">SOLDER_SCHEDULED_UPDATE_CHECKS</span>). They need the scheduler running:
+                the <span class="font-mono text-xs">scheduler</span> container in Docker, or <span class="font-mono text-xs">php artisan schedule:run</span> in cron.
+            </p>
+        </div>
+    </div>
+
     {{-- Minecraft Versions Caching --}}
     <div class="ui-card mt-6"
          x-data="{

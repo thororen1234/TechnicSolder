@@ -97,13 +97,14 @@ docker compose up -d
 
 ## Architecture
 
-The Docker stack consists of five containers:
+The Docker stack consists of six containers:
 
 | Container | Image | Role |
 |-----------|-------|------|
 | **nginx** | `nginx` | Reverse proxy, serves static files, forwards PHP requests to the app |
 | **solder** | Built from `docker/Dockerfile` | PHP-FPM application server |
 | **worker** | Same image as solder | Queue worker for modpack imports, exports and update checks |
+| **scheduler** | Same image as solder | Runs scheduled tasks such as the nightly mod update check |
 | **mysql** | `mariadb` | MariaDB database with a health check |
 | **redis** | `valkey/valkey` | Valkey (Redis-compatible) for caching, sessions, and queues |
 

@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\ActivityLog;
 use App\Models\Modpack;
 use App\Models\User;
+use App\Services\DiscordNotifier;
 use App\Services\PackImportService;
 use App\Services\TaskTracker;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -55,6 +56,7 @@ class ImportModpack implements ShouldQueue
 
         if (isset($result['error'])) {
             TaskTracker::fail($this->taskId, $result['error']);
+            DiscordNotifier::send("Import of {$this->name} failed", $result['error'], color: DiscordNotifier::DANGER);
 
             return;
         }
@@ -71,6 +73,13 @@ class ImportModpack implements ShouldQueue
         if ($result['skipped'] > 0) {
             $message .= " {$result['skipped']} skipped.";
         }
+
+        DiscordNotifier::send(
+            "Imported modpack {$this->name}",
+            $message.($result['errors'] ? "\n".count($result['errors']).' '.Str::plural('problem', count($result['errors'])).' need attention.' : ''),
+            url("modpack/view/{$result['modpack_id']}"),
+            $result['errors'] ? DiscordNotifier::WARNING : DiscordNotifier::SUCCESS,
+        );
 
         TaskTracker::complete($this->taskId, [
             'url' => url("modpack/view/{$result['modpack_id']}"),

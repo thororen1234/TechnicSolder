@@ -14,6 +14,14 @@ All notable changes to Technic Solder will be documented in this file.
 - Compare any two builds of a modpack and copy the differences as a Markdown changelog.
 - Upload mod `.jar` files to create mods from their metadata, or add `.jar` and Solder `.zip` files as new versions of a mod.
 - Settings → Repository checks every mod version's file against its stored checksum and can update checksums for files that were replaced on purpose.
+- Activity log: changes to modpacks and builds (including through the API) are recorded with who made them. Modpack pages show recent activity, build pages have an Activity tab and Settings → Activity lists everything.
+- Publishing a build runs the health check first and asks before publishing a build with problems.
+- Mods → Unused deletes unused mod versions, selected or all, optionally with their files.
+- Importing a mod can also import the mods it requires, picking compatible versions.
+- Mod versions know whether they are client-only or server-only (from Modrinth, CurseForge, `.mrpack` files or the jar, or set by hand), and exports leave out mods for the other side.
+- Copy a build to another Minecraft version, moving the loader and imported mods to compatible versions.
+- Launcher requests per build are counted and shown on modpack and build pages.
+- A nightly check (`solder:check-updates`) finds mod updates for every modpack's latest build and shows them on the dashboard; set `SOLDER_DISCORD_WEBHOOK` to also post them, finished imports, published builds and repository problems to Discord. Docker includes a `scheduler` service; other installs need `php artisan schedule:run` in cron.
 - Modpack imports, build exports, build updates and repository checks run as background jobs with a progress page when a queue worker is running. The Docker stacks include a `worker` service; set `QUEUE_CONNECTION=redis` (Docker) or `database` to use it. Run `php artisan migrate` for the new queue tables and mod version source columns.
 
 ### Fixed

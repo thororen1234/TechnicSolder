@@ -186,6 +186,14 @@ php artisan queue:work --tries=1 --timeout=3600
 
 Restart the worker after updating Solder so it loads the new code (`php artisan queue:restart`).
 
+Solder also checks every modpack's latest build for mod updates each night. Add Laravel's scheduler to cron to run it:
+
+```bash
+* * * * * cd /path/to/TechnicSolder && php artisan schedule:run >> /dev/null 2>&1
+```
+
+Set `SOLDER_DISCORD_WEBHOOK` to post the results (and finished imports, published builds and repository problems) to Discord.
+
 ## Optimize
 
 Cache Solder's configuration, routes, and views for better performance:
