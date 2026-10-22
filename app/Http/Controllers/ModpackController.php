@@ -11,6 +11,7 @@ use App\Jobs\UpdateBuild;
 use App\Libraries\MinecraftUtils;
 use App\Models\ActivityLog;
 use App\Models\Build;
+use App\Models\BuildDownload;
 use App\Models\Client;
 use App\Models\Mod;
 use App\Models\Modpack;
@@ -73,6 +74,7 @@ class ModpackController extends Controller
 
         return view('modpack.view')
             ->with('modpack', $modpack)
+            ->with('launches', BuildDownload::totals($modpack->builds->pluck('id')->all()))
             ->with('activity', ActivityLog::with('user', 'build')->where('modpack_id', $modpack->id)->latest('id')->limit(15)->get());
     }
 
@@ -94,6 +96,7 @@ class ModpackController extends Controller
         return view('modpack.build.view')
             ->with('build', $build)
             ->with('mods', $mods)
+            ->with('launches', BuildDownload::daily($build->id))
             ->with('activity', ActivityLog::with('user')->where('build_id', $build->id)->latest('id')->limit(50)->get());
     }
 

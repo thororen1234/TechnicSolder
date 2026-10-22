@@ -41,7 +41,7 @@
         @endsession
 
         {{-- Stats --}}
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+        <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-8">
             <div class="ui-stat">
                 <p class="ui-stat-label">Builds</p>
                 <p class="ui-stat-value">{{ $modpack->builds->count() }}</p>
@@ -66,6 +66,10 @@
                     @endif
                 </p>
             </div>
+            <div class="ui-stat col-span-2 lg:col-span-1" title="Times the launcher fetched one of this modpack's builds">
+                <p class="ui-stat-label">Launches (30 days)</p>
+                <p class="ui-stat-value">{{ number_format(array_sum($launches)) }}</p>
+            </div>
         </div>
 
         <section class="ui-card overflow-hidden"
@@ -75,13 +79,14 @@
                          'version' => $b->version,
                          'minecraft' => $b->minecraft,
                          'mod_count' => $b->modversions_count,
+                         'launches' => $launches[$b->id] ?? 0,
                          'is_published' => $b->is_published,
                          'private' => $b->private,
                          'created_at' => $b->created_at->toIso8601String(),
                          'created_at_display' => $b->created_at->format('M j, Y'),
                      ])->values()),
                      sortKey: 'id', sortDir: 'desc', tableName: 'modpack-builds',
-                     types: { id: 'number', mod_count: 'number', created_at: 'date' }
+                     types: { id: 'number', mod_count: 'number', launches: 'number', created_at: 'date' }
                  })">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-3.5 border-b border-gray-200 dark:border-gray-800">
                 <h2 class="section-title">Builds</h2>
@@ -98,6 +103,7 @@
                             @include('partial.data-table.sort-header', ['key' => 'version', 'label' => 'Build'])
                             <th class="px-5 py-3 hidden md:table-cell cursor-pointer select-none" @click="sort('minecraft')">Minecraft <span x-show="sortKey === 'minecraft'" x-text="sortDir === 'asc' ? '↑' : '↓'"></span></th>
                             <th class="px-5 py-3 hidden lg:table-cell cursor-pointer select-none" @click="sort('mod_count')">Mods <span x-show="sortKey === 'mod_count'" x-text="sortDir === 'asc' ? '↑' : '↓'"></span></th>
+                            <th class="px-5 py-3 hidden xl:table-cell cursor-pointer select-none" @click="sort('launches')" title="Launcher requests in the last 30 days">Launches <span x-show="sortKey === 'launches'" x-text="sortDir === 'asc' ? '↑' : '↓'"></span></th>
                             <th class="px-3 py-3 text-center" title="Recommended build">Rec</th>
                             <th class="px-3 py-3 text-center" title="Latest build">Latest</th>
                             <th class="px-3 py-3 hidden sm:table-cell">Published</th>
@@ -118,6 +124,7 @@
                                 </td>
                                 <td class="px-5 py-3 text-gray-600 dark:text-gray-400 hidden md:table-cell" x-text="row.minecraft"></td>
                                 <td class="px-5 py-3 text-gray-600 dark:text-gray-400 hidden lg:table-cell tabular-nums" x-text="row.mod_count"></td>
+                                <td class="px-5 py-3 text-gray-600 dark:text-gray-400 hidden xl:table-cell tabular-nums" x-text="row.launches.toLocaleString()"></td>
                                 <td class="px-3 py-3 text-center">
                                     <input autocomplete="off" type="radio" name="recommended"
                                            :value="row.version"
@@ -162,7 +169,7 @@
                         </template>
                         <template x-if="totalFiltered === 0">
                             <tr>
-                                <td colspan="9" class="px-5 py-14 text-center">
+                                <td colspan="10" class="px-5 py-14 text-center">
                                     <template x-if="totalRows === 0">
                                         <div>
                                             <p class="text-sm font-medium text-gray-950 dark:text-white">No builds yet</p>

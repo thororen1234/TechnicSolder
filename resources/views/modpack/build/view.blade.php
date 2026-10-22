@@ -111,6 +111,22 @@
         </div>
     </div>
 
+    {{-- Launches over the last 30 days --}}
+    @php($peak = max(1, max($launches)))
+    <section class="ui-card px-5 py-4 mb-8">
+        <div class="flex items-baseline justify-between gap-3 mb-3">
+            <h2 class="section-title">Launches</h2>
+            <p class="text-xs text-gray-500"><span class="font-medium text-gray-950 dark:text-white tabular-nums">{{ number_format(array_sum($launches)) }}</span> in the last 30 days</p>
+        </div>
+        <div class="flex items-end gap-0.5 h-16" role="img" aria-label="Launcher requests per day over the last 30 days">
+            @foreach ($launches as $date => $count)
+                <div class="flex-1 rounded-sm {{ $count ? 'bg-gray-950 dark:bg-white' : 'bg-gray-100 dark:bg-gray-900' }}"
+                     style="height: {{ max(4, round($count / $peak * 100)) }}%"
+                     title="{{ \Illuminate\Support\Carbon::parse($date)->format('M j') }}: {{ number_format($count) }}"></div>
+            @endforeach
+        </div>
+    </section>
+
     <div x-data="{ tab: ['health', 'updates', 'activity'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'mods' }"
          x-init="$watch('tab', value => history.replaceState(null, '', value === 'mods' ? location.pathname : '#' + value))">
         <nav class="flex items-center gap-1 mb-6 border-b border-gray-200 dark:border-gray-800" aria-label="Build sections">

@@ -6,6 +6,7 @@ use App\Http\ApiAuthContext;
 use App\Http\Controllers\Controller;
 use App\JavaRuntimesEnum;
 use App\Models\Build;
+use App\Models\BuildDownload;
 use App\Models\Modpack;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -55,6 +56,8 @@ class BuildController extends Controller
         if (! $build->isAccessibleBy($auth)) {
             return response()->json(['error' => 'Build does not exist'], 404);
         }
+
+        BuildDownload::record($build->id);
 
         $response = [
             'id' => $build->id,
