@@ -64,6 +64,11 @@ class Modrinth extends ModProvider
 
     public static function mod(string $modId): ?ImportedModData
     {
+        return static::modFor($modId);
+    }
+
+    public static function modFor(string $modId, string $gameVersion = '', string $loader = ''): ?ImportedModData
+    {
         $mod = static::request('/project/'.rawurlencode($modId));
 
         if (! is_object($mod)) {
@@ -79,7 +84,13 @@ class Modrinth extends ModProvider
             $modData->authors = $owner->user->username;
         }
 
-        foreach (static::request('/project/'.rawurlencode($modId).'/version') ?? [] as $version) {
+        $filters = array_filter([
+            'game_versions' => $gameVersion !== '' ? json_encode([$gameVersion]) : null,
+            'loaders' => $loader !== '' ? json_encode([$loader]) : null,
+        ]);
+        $query = $filters ? '?'.http_build_query($filters) : '';
+
+        foreach (static::request('/project/'.rawurlencode($modId).'/version'.$query) ?? [] as $version) {
             self::addVersion($modData, $version);
         }
 

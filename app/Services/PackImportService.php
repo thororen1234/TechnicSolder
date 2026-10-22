@@ -14,6 +14,7 @@ use App\Mods\Providers\Forge;
 use App\Mods\Providers\Modrinth;
 use App\Mods\Providers\NeoForge;
 use App\Mods\Providers\Quilt;
+use Closure;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
@@ -35,11 +36,24 @@ class PackImportService
     private int $skipped = 0;
 
     /**
+     * @param  (Closure(int $done, int $total, string $message): void)|null  $progress
+     */
+    public function __construct(private ?Closure $progress = null) {}
+
+    /**
      * @return array{error: string}|array{modpack_id: int, build_id: int, imported: int, skipped: int, errors: list<string>}
      */
     public function importFromFile(UploadedFile $file, string $name, string $slug): array
     {
-        return $this->process($file->getRealPath(), $name, $slug);
+        return $this->importFromPath($file->getRealPath(), $name, $slug);
+    }
+
+    /**
+     * @return array{error: string}|array{modpack_id: int, build_id: int, imported: int, skipped: int, errors: list<string>}
+     */
+    public function importFromPath(string $path, string $name, string $slug): array
+    {
+        return $this->process($path, $name, $slug);
     }
 
     /**
@@ -121,8 +135,9 @@ class PackImportService
 
         $modversionIds = [];
 
+        $this->report(0, count($files), 'Looking up mods on CurseForge');
         $mods = CurseForge::modsForFiles(array_map(fn ($file) => $file->fileID, $files));
-        foreach ($files as $file) {
+        foreach ($files as $index => $file) {
             $projectId = (string) ($file->projectID ?? '');
             $fileId = (string) $file->fileID;
             $modData = $mods[$projectId] ?? null;
@@ -133,6 +148,7 @@ class PackImportService
                 continue;
             }
 
+            $this->report($index, count($files), "Downloading {$modData->name}");
             $this->installVersion(CurseForge::class, $projectId, $fileId, $modData, $modversionIds);
         }
 
@@ -185,7 +201,10 @@ class PackImportService
             }
         }
 
+        $total = count($files);
+        $this->report(0, $total, 'Looking up mods on Modrinth');
         $mods = Modrinth::modsForVersions(array_map(fn ($entry) => $entry[2], $modrinthFiles));
+        $done = 0;
         foreach ($modrinthFiles as [$file, $projectId, $versionId]) {
             $modData = $mods[$projectId] ?? null;
 
@@ -198,10 +217,12 @@ class PackImportService
 
             $modData->versions[$versionId]->folder = $this->folderFromPath($file->path ?? '');
             $modData->versions[$versionId]->filename = basename($file->path ?? $modData->versions[$versionId]->filename);
+            $this->report($done++, $total, "Downloading {$modData->name}");
             $this->installVersion(Modrinth::class, $projectId, $versionId, $modData, $modversionIds);
         }
 
         foreach ($otherFiles as $file) {
+            $this->report($done++, $total, 'Downloading '.basename((string) ($file->path ?? 'file')));
             $this->installDirectFile($file, $minecraft, $modversionIds);
         }
 
@@ -235,6 +256,8 @@ class PackImportService
             'gameVersions' => $minecraft !== '' ? [$minecraft] : [],
             'folder' => $this->folderFromPath($path),
             'sha1' => $file->hashes->sha1 ?? null,
+            // Not actually from Modrinth, so don't record it as a Modrinth file
+            'untracked' => true,
         ];
 
         $this->installVersion(Modrinth::class, $slug, $filename, $modData, $modversionIds);
@@ -283,6 +306,7 @@ class PackImportService
             default => ["$minecraft-$version"],
         };
 
+        $this->report(1, 1, "Adding $type $version");
         $key = collect($candidates)->first(fn ($candidate) => isset($loaderData->versions[$candidate]));
 
         if ($key === null) {
@@ -406,7 +430,10 @@ class PackImportService
             foreach ($modData['versions'] ?? [] as $versionData) {
                 $modversion = Modversion::firstOrCreate(
                     ['mod_id' => $mod->id, 'version' => $versionData['version']],
-                    ['md5' => $versionData['md5'] ?? '', 'filesize' => $versionData['filesize'] ?? 0],
+                    ['md5' => $versionData['md5'] ?? '', 'filesize' => $versionData['filesize'] ?? 0] + array_intersect_key(
+                        $versionData,
+                        array_flip(['provider', 'provider_project_id', 'provider_version_id'])
+                    ),
                 );
                 $modversionsByKey[$mod->name."\0".$modversion->version] = $modversion->id;
                 $this->imported++;
@@ -503,6 +530,13 @@ class PackImportService
         $build->save();
 
         return $build;
+    }
+
+    private function report(int $done, int $total, string $message): void
+    {
+        if ($this->progress !== null) {
+            ($this->progress)($done, $total, $message);
+        }
     }
 
     private function fail(string ...$messages): void

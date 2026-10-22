@@ -172,6 +172,20 @@ If you use HTTPS (recommended), make sure `APP_URL` in your `.env` starts with `
 !!! warning
     If Solder is behind a load balancer or reverse proxy that terminates TLS (e.g. Cloudflare), you may need to configure your PHP-FPM pool with the `HTTPS` environment variable. See the [web server configs guide](../guides/web-server-configs.md) for details.
 
+## Background Jobs
+
+Modpack imports, exports and build update checks can take several minutes for large packs. By default
+(`QUEUE_CONNECTION=sync`) they run inside the web request, so the page waits until they finish.
+
+To run them in the background with a progress page, set `QUEUE_CONNECTION=database` in `.env` and keep a
+queue worker running, for example with systemd or Supervisor:
+
+```bash
+php artisan queue:work --tries=1 --timeout=3600
+```
+
+Restart the worker after updating Solder so it loads the new code (`php artisan queue:restart`).
+
 ## Optimize
 
 Cache Solder's configuration, routes, and views for better performance:

@@ -5,8 +5,8 @@ namespace App\Services;
 use App\Models\Build;
 use App\Models\Modpack;
 use App\Models\Modversion;
-use App\Mods\ModProvider;
 use App\Mods\Providers\Modrinth;
+use Closure;
 use Generator;
 use ZipArchive;
 
@@ -63,10 +63,20 @@ class PackExportService
     /** @var list<string> */
     private array $tempFiles = [];
 
+    private ModRepository $repository;
+
+    /**
+     * @param  (Closure(int $done, int $total, string $message): void)|null  $progress
+     */
+    public function __construct(private ?Closure $progress = null)
+    {
+        $this->repository = new ModRepository;
+    }
+
     /**
      * Export a build. The caller is responsible for deleting the returned file.
      *
-     * @return array{path: string, filename: string}
+     * @return array{path: string, filename: string, warnings: list<string>}
      */
     public function exportBuild(Build $build, string $format): array
     {
@@ -93,6 +103,7 @@ class PackExportService
                 $zip->addFromString('EXPORT_WARNINGS.txt', "Some files could not be exported:\n\n- ".implode("\n- ", $this->warnings)."\n");
             }
 
+            $this->report(1, 1, 'Compressing archive');
             $zip->close();
         } finally {
             foreach ($this->tempFiles as $tempFile) {
@@ -101,6 +112,7 @@ class PackExportService
                 }
             }
             $this->tempFiles = [];
+            $this->repository->cleanup();
         }
 
         $version = trim(preg_replace('/[^A-Za-z0-9._+-]+/', '-', $build->version), '-');
@@ -109,6 +121,7 @@ class PackExportService
         return [
             'path' => $path,
             'filename' => "{$build->modpack->slug}-$version{$options['suffix']}.{$options['extension']}",
+            'warnings' => $this->warnings,
         ];
     }
 
@@ -124,7 +137,9 @@ class PackExportService
             foreach ($build->modversions as $modversion) {
                 $mod = $modversion->mod;
                 $mods[$mod->name] ??= $mod->only(['name', 'pretty_name', 'author', 'description', 'link']) + ['versions' => []];
-                $mods[$mod->name]['versions'][$modversion->version] = $modversion->only(['version', 'md5', 'filesize']);
+                $mods[$mod->name]['versions'][$modversion->version] = $modversion->only([
+                    'version', 'md5', 'filesize', 'provider', 'provider_project_id', 'provider_version_id',
+                ]);
             }
         }
 
@@ -150,46 +165,6 @@ class PackExportService
         ];
     }
 
-    /**
-     * Work out which mod loader a build uses from its loader mods, or the loader recorded by an import.
-     *
-     * @return array{type: string, version: string}|null
-     */
-    public function detectLoader(Build $build): ?array
-    {
-        $minecraft = (string) $build->minecraft;
-        $withoutMinecraft = fn (string $version) => str_starts_with($version, "$minecraft-")
-            ? substr($version, strlen($minecraft) + 1)
-            : $version;
-
-        foreach ($build->modversions as $modversion) {
-            $version = (string) $modversion->version;
-
-            switch ($modversion->mod->name ?? '') {
-                case 'fabric-loader':
-                    return ['type' => 'fabric', 'version' => $withoutMinecraft($version)];
-                case 'quilt-loader':
-                    return ['type' => 'quilt', 'version' => $withoutMinecraft($version)];
-                case 'forge':
-                    // Imported as "{mc}-forge-{version}"; very old builds also end in "-{mc}"
-                    $version = preg_match('/-forge-(.+)$/', $version, $match) ? $match[1] : $withoutMinecraft($version);
-
-                    return ['type' => 'forge', 'version' => preg_replace('/-'.preg_quote($minecraft, '/').'$/', '', $version)];
-                case 'neoforge':
-                    // Imported as "neoforge-{version}" or, for 1.20.1, "forge-{mc}-{version}"
-                    $version = preg_replace('/^(neoforge|forge)-/', '', $version);
-
-                    return ['type' => 'neoforge', 'version' => $withoutMinecraft($version)];
-            }
-        }
-
-        if (preg_match('/^(neoforge|forge|fabric|quilt)(?:-loader)?-(.+)$/', (string) $build->forge, $match)) {
-            return ['type' => $match[1], 'version' => $match[2]];
-        }
-
-        return null;
-    }
-
     private function writeClient(Build $build, ZipArchive $out): void
     {
         foreach ($this->archives($build) as $archive) {
@@ -212,7 +187,7 @@ class PackExportService
             });
         }
 
-        $loader = $this->detectLoader($build);
+        $loader = $build->loader();
         $readme = "{$build->modpack->name} {$build->version} server\nMinecraft {$build->minecraft}\n\n";
 
         if ($installer !== null) {
@@ -282,7 +257,7 @@ class PackExportService
         }
 
         if (! empty($bundle)) {
-            foreach ($this->archives($build) as $key => $archive) {
+            foreach ($this->archives($build, array_keys($bundle)) as $key => $archive) {
                 foreach ($bundle[$key] ?? [] as $name) {
                     $out->addFromString("overrides/$name", (string) $archive->getFromName($name));
                 }
@@ -290,7 +265,7 @@ class PackExportService
         }
 
         $dependencies = ['minecraft' => (string) $build->minecraft];
-        $loader = $this->detectLoader($build);
+        $loader = $build->loader();
         if ($loader !== null) {
             $dependencies[self::MRPACK_LOADER_KEYS[$loader['type']]] = $loader['version'];
         } else {
@@ -309,11 +284,26 @@ class PackExportService
 
     private function writeCurseForge(Build $build, ZipArchive $out): void
     {
-        foreach ($this->archives($build) as $archive) {
+        // Mods imported from CurseForge are referenced by ID; everything else is bundled as overrides
+        $files = [];
+        $bundled = [];
+        foreach ($build->modversions as $modversion) {
+            if ($modversion->provider === 'curseforge' && ctype_digit((string) $modversion->provider_project_id) && ctype_digit((string) $modversion->provider_version_id)) {
+                $files[] = [
+                    'projectID' => (int) $modversion->provider_project_id,
+                    'fileID' => (int) $modversion->provider_version_id,
+                    'required' => true,
+                ];
+            } else {
+                $bundled[] = $modversion->id;
+            }
+        }
+
+        foreach ($this->archives($build, $bundled) as $archive) {
             $this->copyEntries($archive, $out, fn (string $name) => str_starts_with($name, 'bin/') ? null : "overrides/$name");
         }
 
-        $loader = $this->detectLoader($build);
+        $loader = $build->loader();
         if ($loader === null) {
             $this->warnings[] = 'No mod loader was found in this build; set it in your launcher after importing.';
         }
@@ -328,7 +318,7 @@ class PackExportService
             'name' => $build->modpack->name,
             'version' => (string) $build->version,
             'author' => '',
-            'files' => [],
+            'files' => $files,
             'overrides' => 'overrides',
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
     }
@@ -336,20 +326,28 @@ class PackExportService
     /**
      * Open each mod version's zip in turn, keyed by modversion ID. Missing files are recorded as warnings.
      *
+     * @param  list<int>|null  $only  Limit to these modversion IDs
      * @return Generator<int, ZipArchive>
      */
-    private function archives(Build $build): Generator
+    private function archives(Build $build, ?array $only = null): Generator
     {
-        $modversions = $build->modversions->sortBy(fn (Modversion $modversion) => $modversion->mod->name);
+        $modversions = $build->modversions
+            ->when($only !== null, fn ($collection) => $collection->whereIn('id', $only))
+            ->sortBy(fn (Modversion $modversion) => $modversion->mod->name)
+            ->values();
 
-        foreach ($modversions as $modversion) {
-            $path = $this->localArchive($modversion);
-            if ($path === null) {
+        foreach ($modversions as $index => $modversion) {
+            $this->report($index, $modversions->count(), "Adding {$modversion->mod->pretty_name} {$modversion->version}");
+
+            $copy = $this->repository->localCopy($modversion);
+            if (isset($copy['error'])) {
+                $this->warnings[] = "{$modversion->mod->name} {$modversion->version}: {$copy['error']}";
+
                 continue;
             }
 
             $zip = new ZipArchive;
-            if ($zip->open($path, ZipArchive::RDONLY) !== true) {
+            if ($zip->open($copy['path'], ZipArchive::RDONLY) !== true) {
                 $this->warnings[] = "{$modversion->mod->name} {$modversion->version}: not a valid zip";
 
                 continue;
@@ -361,38 +359,6 @@ class PackExportService
                 $zip->close();
             }
         }
-    }
-
-    /**
-     * Path to a mod version's zip on disk, downloading it first when the repository is remote.
-     */
-    private function localArchive(Modversion $modversion): ?string
-    {
-        $name = $modversion->mod->name;
-        $relative = "mods/$name/$name-{$modversion->version}.zip";
-        $repo = config('solder.repo_location');
-
-        if (! filter_var($repo, FILTER_VALIDATE_URL)) {
-            if (is_file($repo.$relative)) {
-                return $repo.$relative;
-            }
-
-            $this->warnings[] = "$name {$modversion->version}: $relative is missing from the mod repository";
-
-            return null;
-        }
-
-        $tmp = tempnam(sys_get_temp_dir(), 'solder_export_mod_');
-        $this->tempFiles[] = $tmp;
-
-        $error = ModProvider::download($repo.$relative, $tmp);
-        if ($error !== null) {
-            $this->warnings[] = "$name {$modversion->version}: $error";
-
-            return null;
-        }
-
-        return $tmp;
     }
 
     /**
@@ -442,5 +408,12 @@ class PackExportService
         $zip->close();
 
         return $found;
+    }
+
+    private function report(int $done, int $total, string $message): void
+    {
+        if ($this->progress !== null) {
+            ($this->progress)($done, $total, $message);
+        }
     }
 }

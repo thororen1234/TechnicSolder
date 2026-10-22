@@ -73,6 +73,8 @@ The `.env` file is loaded automatically by Docker Compose. Any variables you set
 | `SOLDER_CORS_ORIGINS` | `*` | Allowed CORS origins |
 | `SOLDER_ADVANCED_MODE` | `false` | Show advanced build UI settings; does not gate the API or saved overrides |
 | `MAIL_ENABLED` | `false` | Enable email functionality |
+| `QUEUE_CONNECTION` | `redis` | `redis` runs imports, exports and update checks in the worker container; `sync` runs them in the web request |
+| `CURSEFORGE_API_KEY` | | Required to import mods and modpacks from CurseForge |
 
 !!! note
     For a complete list of all environment variables and what they do, see the [Configuration reference](configuration.md).
@@ -95,12 +97,13 @@ docker compose up -d
 
 ## Architecture
 
-The Docker stack consists of four containers:
+The Docker stack consists of five containers:
 
 | Container | Image | Role |
 |-----------|-------|------|
 | **nginx** | `nginx` | Reverse proxy, serves static files, forwards PHP requests to the app |
 | **solder** | Built from `docker/Dockerfile` | PHP-FPM application server |
+| **worker** | Same image as solder | Queue worker for modpack imports, exports and update checks |
 | **mysql** | `mariadb` | MariaDB database with a health check |
 | **redis** | `valkey/valkey` | Valkey (Redis-compatible) for caching, sessions, and queues |
 

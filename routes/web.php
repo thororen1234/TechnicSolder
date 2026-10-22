@@ -6,6 +6,7 @@ use App\Http\Controllers\KeyController;
 use App\Http\Controllers\ModController;
 use App\Http\Controllers\ModpackController;
 use App\Http\Controllers\SolderController;
+use App\Http\Controllers\TaskController;
 use App\Http\Controllers\UserController;
 use App\Services\PackExportService;
 use Illuminate\Support\Facades\Route;
@@ -23,6 +24,10 @@ Route::middleware('auth')->group(function () {
     Route::post('client/delete/{client_id}', [ClientController::class, 'postDelete']);
 
     Route::get('dashboard', [DashboardController::class, 'getIndex'])->name('dashboard');
+
+    Route::get('task/{taskId}', [TaskController::class, 'show'])->whereUuid('taskId')->name('task.show');
+    Route::get('task/{taskId}/status', [TaskController::class, 'status'])->whereUuid('taskId')->name('task.status');
+    Route::get('task/{taskId}/download', [TaskController::class, 'download'])->whereUuid('taskId')->name('task.download');
 
     Route::redirect('key', 'key/list');
     Route::get('key/list', [KeyController::class, 'getList'])->name('key.list');
@@ -57,6 +62,8 @@ Route::middleware('auth')->group(function () {
     Route::get('modpack/build/{build_id}/export/{format}', [ModpackController::class, 'getExportBuildArchive'])
         ->whereIn('format', array_keys(PackExportService::FORMATS))
         ->name('modpack.build.export.archive');
+    Route::get('modpack/build/{build_id}/updates', [ModpackController::class, 'getBuildUpdates'])->name('modpack.build.updates');
+    Route::post('modpack/build/{build_id}/updates', [ModpackController::class, 'postBuildUpdates']);
     Route::get('modpack/export/{modpack_id}', [ModpackController::class, 'getExportModpack'])->name('modpack.export');
     Route::get('modpack/build/{build_id}/edit', [ModpackController::class, 'getEditBuild'])->name('modpack.build.edit');
     Route::post('modpack/build/{build_id}/edit', [ModpackController::class, 'postEditBuild']);

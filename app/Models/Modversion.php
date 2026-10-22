@@ -17,6 +17,9 @@ use Illuminate\Support\Carbon;
  * @property Carbon $updated_at
  * @property int|null $filesize
  * @property string|null $notes
+ * @property string|null $provider Key of the ModProvider the file was imported from, e.g. "modrinth"
+ * @property string|null $provider_project_id
+ * @property string|null $provider_version_id
  * @property-read Collection<int, Build> $builds
  * @property-read int|null $builds_count
  * @property-read mixed $url
@@ -43,7 +46,18 @@ class Modversion extends Model
         'md5',
         'filesize',
         'notes',
+        'provider',
+        'provider_project_id',
+        'provider_version_id',
     ];
+
+    /**
+     * Relative path of this version's zip in the mod repository.
+     */
+    public function repositoryPath(): string
+    {
+        return "mods/{$this->mod->name}/{$this->mod->name}-{$this->version}.zip";
+    }
 
     public function mod(): BelongsTo
     {

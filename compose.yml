@@ -11,7 +11,7 @@ services:
       - .:/var/www/html:ro
       - ./public:/var/www/html/public:ro
 
-  solder:
+  solder: &solder
     build:
       context: .
       dockerfile: docker/Dockerfile
@@ -41,6 +41,9 @@ services:
       - DB_PASSWORD=${DB_PASSWORD:-solder}
       - CACHE_STORE=redis
       - QUEUE_CONNECTION=${QUEUE_CONNECTION:-redis}
+      # Longer than the slowest job (1 hour) so running imports aren't started twice
+      - REDIS_QUEUE_RETRY_AFTER=${REDIS_QUEUE_RETRY_AFTER:-3900}
+      - DB_QUEUE_RETRY_AFTER=${DB_QUEUE_RETRY_AFTER:-3900}
       - SESSION_DRIVER=redis
       - SESSION_LIFETIME=${SESSION_LIFETIME:-120}
       - SESSION_ENCRYPT=${SESSION_ENCRYPT:-true}
@@ -66,6 +69,14 @@ services:
     volumes:
       - .:/var/www/html
     command: ["/bin/bash", "/var/www/html/docker/entrypoint.sh"]
+
+  # Runs modpack imports, exports and update checks in the background
+  worker:
+    <<: *solder
+    user: www-data
+    depends_on:
+      - solder
+    command: ["php", "/var/www/html/artisan", "queue:work", "--tries=1", "--timeout=3600", "--sleep=2"]
 
   mysql:
     image: mariadb:lts@sha256:805c8e104bd563d5bfa24fadd3f31cd419ea859cb5277f32b5dbf2db714f9ed1

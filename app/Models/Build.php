@@ -84,4 +84,45 @@ class Build extends Model
     {
         return $this->is_published && ! $this->private;
     }
+
+    /**
+     * The mod loader this build uses, from its loader mod (as created by the loader importers)
+     * or the loader recorded by a modpack import.
+     *
+     * @return array{type: 'forge'|'neoforge'|'fabric'|'quilt', version: string}|null
+     */
+    public function loader(): ?array
+    {
+        $minecraft = (string) $this->minecraft;
+        $withoutMinecraft = fn (string $version) => str_starts_with($version, "$minecraft-")
+            ? substr($version, strlen($minecraft) + 1)
+            : $version;
+
+        foreach ($this->modversions as $modversion) {
+            $version = (string) $modversion->version;
+
+            switch ($modversion->mod->name ?? '') {
+                case 'fabric-loader':
+                    return ['type' => 'fabric', 'version' => $withoutMinecraft($version)];
+                case 'quilt-loader':
+                    return ['type' => 'quilt', 'version' => $withoutMinecraft($version)];
+                case 'forge':
+                    // Imported as "{mc}-forge-{version}"; very old builds also end in "-{mc}"
+                    $version = preg_match('/-forge-(.+)$/', $version, $match) ? $match[1] : $withoutMinecraft($version);
+
+                    return ['type' => 'forge', 'version' => preg_replace('/-'.preg_quote($minecraft, '/').'$/', '', $version)];
+                case 'neoforge':
+                    // Imported as "neoforge-{version}" or, for 1.20.1, "forge-{mc}-{version}"
+                    $version = preg_replace('/^(neoforge|forge)-/', '', $version);
+
+                    return ['type' => 'neoforge', 'version' => $withoutMinecraft($version)];
+            }
+        }
+
+        if (preg_match('/^(neoforge|forge|fabric|quilt)(?:-loader)?-(.+)$/', (string) $this->forge, $match)) {
+            return ['type' => $match[1], 'version' => $match[2]];
+        }
+
+        return null;
+    }
 }

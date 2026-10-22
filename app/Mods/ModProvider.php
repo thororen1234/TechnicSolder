@@ -22,6 +22,14 @@ abstract class ModProvider
     abstract public static function mod(string $modId): ?ImportedModData;
 
     /**
+     * Key of this provider in ModProviders::providers(), stored on imported mod versions.
+     */
+    public static function key(): string
+    {
+        return (string) array_search(static::class, ModProviders::providers(), true);
+    }
+
+    /**
      * Load a mod with its versions narrowed to a game version and loader, for providers that only
      * return a page of versions at a time. Defaults to mod().
      */
@@ -173,8 +181,19 @@ abstract class ModProvider
 
             $modVersion = static::sanitizeVersion($modVersion);
 
+            // Remember where the file came from, for update checks and CurseForge manifests
+            $source = empty($versionData->untracked) ? [
+                'provider' => static::key(),
+                'provider_project_id' => (string) $modData->id,
+                'provider_version_id' => $versionKey,
+            ] : [];
+
             $existing = Modversion::where(['mod_id' => $mod->id, 'version' => $modVersion])->first();
             if ($existing) {
+                if ($existing->provider === null && $source !== []) {
+                    $existing->update($source);
+                }
+
                 return ['id' => $existing->id, 'existing' => true];
             }
 
@@ -193,7 +212,7 @@ abstract class ModProvider
             $zip->addFile($tmpFile, ($folder === '' ? '' : "$folder/").$fileName);
             $zip->close();
 
-            $modversion = new Modversion;
+            $modversion = new Modversion($source);
             $modversion->mod_id = $mod->id;
             $modversion->version = $modVersion;
             $modversion->filesize = filesize($finalPath);
@@ -263,11 +282,12 @@ abstract class ModProvider
      *
      * @param  array<string, object>  $versions  Ordered newest first
      * @param  string  $releaseType  "release"|"beta"|"alpha"|"any"|"" (empty = prefer release > beta > alpha)
-     * @param  string  $loader  Only consider files for this loader, when the provider reports loaders
+     * @param  string|list<string>  $loader  Only consider files for this loader (or any of these), when the provider reports loaders
      */
-    public static function latestStableVersionForGame(array $versions, string $gameVersion, string $releaseType = '', string $loader = ''): ?string
+    public static function latestStableVersionForGame(array $versions, string $gameVersion, string $releaseType = '', string|array $loader = ''): ?string
     {
         $candidates = [];
+        $wantedLoaders = array_values(array_filter((array) $loader));
 
         foreach ($versions as $key => $version) {
             $gameVersions = (array) ($version->gameVersions ?? []);
@@ -277,7 +297,7 @@ abstract class ModProvider
             }
 
             $loaders = (array) ($version->loaders ?? []);
-            if ($loader !== '' && ! empty($loaders) && ! in_array($loader, $loaders)) {
+            if ($wantedLoaders !== [] && ! empty($loaders) && ! array_intersect($wantedLoaders, $loaders)) {
                 continue;
             }
 

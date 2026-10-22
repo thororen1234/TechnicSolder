@@ -4,20 +4,25 @@ namespace App\Http\Controllers;
 
 use App\JavaRuntimesEnum;
 use App\JavaVersionsEnum;
+use App\Jobs\ExportBuild;
+use App\Jobs\ImportModpack;
+use App\Jobs\UpdateBuild;
 use App\Libraries\MinecraftUtils;
 use App\Models\Build;
 use App\Models\Client;
 use App\Models\Mod;
 use App\Models\Modpack;
 use App\Models\Modversion;
+use App\Services\BuildUpdateService;
 use App\Services\PackExportService;
-use App\Services\PackImportService;
+use App\Services\TaskTracker;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -122,9 +127,9 @@ class ModpackController extends Controller
         ]);
     }
 
-    public function getExportBuildArchive(PackExportService $exporter, $build_id, string $format): BinaryFileResponse|RedirectResponse
+    public function getExportBuildArchive($build_id, string $format): BinaryFileResponse|RedirectResponse
     {
-        $build = Build::with('modpack', 'modversions.mod')->find($build_id);
+        $build = Build::with('modpack')->find($build_id);
 
         if (empty($build)) {
             return redirect('modpack/list')->withErrors(['Build not found']);
@@ -132,12 +137,17 @@ class ModpackController extends Controller
 
         $this->authorize('update', [Build::class, $build->modpack]);
 
-        // Large packs take a while to assemble
-        set_time_limit(0);
+        $label = PackExportService::FORMATS[$format]['label'];
+        $taskId = TaskTracker::create(Auth::id(), "Exporting {$build->modpack->name} {$build->version} ({$label})");
+        $this->runTask(new ExportBuild($taskId, $build->id, $format));
 
-        $export = $exporter->exportBuild($build, $format);
+        // Without a queue worker the export has already finished: send it straight away
+        $task = TaskTracker::get($taskId);
+        if ($task['status'] === 'completed') {
+            return response()->download(Storage::disk('local')->path($task['result']['path']), $task['result']['filename']);
+        }
 
-        return response()->download($export['path'], $export['filename'])->deleteFileAfterSend();
+        return redirect()->route('task.show', $taskId);
     }
 
     public function getExportModpack(PackExportService $exporter, $modpack_id): StreamedResponse|RedirectResponse
@@ -157,6 +167,55 @@ class ModpackController extends Controller
         }, "{$modpack->slug}-solder-backup.json", [
             'Content-Type' => 'application/json',
         ]);
+    }
+
+    public function getBuildUpdates(BuildUpdateService $updates, $build_id): JsonResponse
+    {
+        $build = Build::with('modpack')->find($build_id);
+        abort_if(empty($build), 404);
+
+        $this->authorize('update', [Build::class, $build->modpack]);
+
+        return response()->json(['updates' => $updates->check($build)]);
+    }
+
+    public function postBuildUpdates($build_id): RedirectResponse
+    {
+        $build = Build::with('modpack')->find($build_id);
+
+        if (empty($build)) {
+            return redirect('modpack/list')->withErrors(['Build not found']);
+        }
+
+        $this->authorize('update', [Build::class, $build->modpack]);
+
+        $validation = Validator::make(Request::all(), [
+            'version' => ['required', 'string', 'max:255', Rule::unique('builds')->where('modpack_id', $build->modpack_id)],
+            'modversions' => ['required', 'array', 'min:1'],
+            'modversions.*' => ['integer'],
+        ], [
+            'version.unique' => 'This modpack already has a build with that version.',
+            'modversions.required' => 'Select at least one update.',
+        ]);
+
+        if ($validation->fails()) {
+            return redirect('modpack/build/'.$build->id)->withErrors($validation->messages())->withInput();
+        }
+
+        $taskId = TaskTracker::create(Auth::id(), "Updating {$build->modpack->name} to {$validation->validated()['version']}");
+        $this->runTask(new UpdateBuild($taskId, $build->id, $validation->validated()['version'], array_map('intval', Request::input('modversions'))));
+
+        $task = TaskTracker::get($taskId);
+        if ($task['status'] === 'completed') {
+            $redirect = redirect($task['result']['url'])->with('success', $task['result']['message']);
+
+            return empty($task['errors']) ? $redirect : $redirect->withErrors($task['errors']);
+        }
+        if ($task['status'] === 'failed') {
+            return redirect('modpack/build/'.$build->id)->withErrors($task['errors']);
+        }
+
+        return redirect()->route('task.show', $taskId);
     }
 
     public function getEditBuild($build_id = null)
@@ -441,35 +500,40 @@ class ModpackController extends Controller
         $name = Request::input('name');
         $slug = Str::slug(Request::input('slug'));
 
-        // Every mod in the pack is downloaded during this request
-        set_time_limit(0);
-
-        $service = new PackImportService;
-
-        if (Request::input('source') === 'file') {
-            $result = $service->importFromFile(Request::file('file'), $name, $slug);
-        } else {
-            $result = $service->importFromUrl(Request::input('url'), $name, $slug);
+        $path = null;
+        if ($source === 'file') {
+            $stored = Request::file('file')->storeAs('imports', Str::uuid().'.'.Request::file('file')->getClientOriginalExtension(), 'local');
+            $path = Storage::disk('local')->path($stored);
         }
 
-        if (isset($result['error'])) {
-            return redirect('modpack/import')->withErrors([$result['error']])->withInput();
+        $taskId = TaskTracker::create(Auth::id(), "Importing $name");
+        $this->runTask(new ImportModpack($taskId, Auth::id(), $name, $slug, $path, $source === 'url' ? Request::input('url') : null));
+
+        // Without a queue worker the import has already finished
+        $task = TaskTracker::get($taskId);
+        if ($task['status'] === 'failed') {
+            return redirect('modpack/import')->withErrors($task['errors'])->withInput();
+        }
+        if ($task['status'] === 'completed') {
+            $redirect = redirect($task['result']['url'])->with('success', $task['result']['message']);
+
+            return empty($task['errors']) ? $redirect : $redirect->withErrors($task['errors']);
         }
 
-        Auth::user()->permission->grantModpackAccess($result['modpack_id']);
-        Cache::forget('modpacks');
-        Cache::forget('allmodpacks');
+        return redirect()->route('task.show', $taskId);
+    }
 
-        $msg = "{$result['imported']} mod(s) imported.";
-        if ($result['skipped'] > 0) {
-            $msg .= " {$result['skipped']} skipped.";
+    /**
+     * Dispatch a background job. With the sync queue it runs right away, and a failure is recorded
+     * on its task by the job's failed() handler rather than surfacing as an error page.
+     */
+    private function runTask(object $job): void
+    {
+        try {
+            dispatch($job);
+        } catch (\Throwable $e) {
+            report($e);
         }
-
-        $redirect = redirect("modpack/view/{$result['modpack_id']}")->with('success', $msg);
-
-        return ! empty($result['errors'])
-            ? $redirect->withErrors($result['errors'])
-            : $redirect;
     }
 
     public function getCreate(): View

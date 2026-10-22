@@ -19,6 +19,7 @@ if [ ! -f .env ]; then
     sed -i 's/^REDIS_HOST=.*/REDIS_HOST=redis/' .env
     sed -i 's/^CACHE_STORE=.*/CACHE_STORE=redis/' .env
     sed -i 's/^SESSION_DRIVER=.*/SESSION_DRIVER=redis/' .env
+    sed -i 's/^QUEUE_CONNECTION=.*/QUEUE_CONNECTION=redis/' .env
     php artisan key:generate --force
 fi
 
