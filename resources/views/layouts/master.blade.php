@@ -194,6 +194,7 @@
             <nav data-subnav="settings" class="subnav" aria-label="Settings">
                 <a href="{{ url('solder/configure') }}" class="subnav-link" :aria-current="isCurrent(['/solder/configure']) ? 'page' : null">Configuration</a>
                 <a href="{{ url('solder/update') }}" class="subnav-link" :aria-current="isCurrent(['/solder/update']) ? 'page' : null">Updates</a>
+                <a href="{{ url('solder/repository') }}" class="subnav-link" :aria-current="isCurrent(['/solder/repository']) ? 'page' : null">Repository</a>
                 <a href="{{ url('user/list') }}" class="subnav-link" :aria-current="isCurrent(['/user']) ? 'page' : null">Users</a>
                 <a href="{{ url('client/list') }}" class="subnav-link" :aria-current="isCurrent(['/client']) ? 'page' : null">Clients</a>
                 <a href="{{ url('key/list') }}" class="subnav-link" :aria-current="isCurrent(['/key']) ? 'page' : null">Platform keys</a>

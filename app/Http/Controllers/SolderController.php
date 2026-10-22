@@ -2,12 +2,19 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\CheckModRepository;
 use App\Libraries\MinecraftUtils;
 use App\Libraries\UpdateUtils;
+use App\Models\Modversion;
+use App\Services\ModRepository;
+use App\Services\TaskTracker;
 use Exception;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Request;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 class SolderController extends Controller
@@ -15,6 +22,72 @@ class SolderController extends Controller
     public function getConfigure()
     {
         return view('solder.configure');
+    }
+
+    /**
+     * Mod repository check: results of a previous run (?task=...) or a button to start one.
+     */
+    public function getRepository(): View
+    {
+        $this->authorize('update', Modversion::class);
+
+        $task = Request::query('task') ? TaskTracker::get((string) Request::query('task')) : null;
+        if ($task !== null && $task['user_id'] !== Auth::id()) {
+            $task = null;
+        }
+
+        return view('solder.repository', [
+            'task' => $task,
+            'isRemote' => ModRepository::isRemote(),
+            'location' => config('solder.repo_location'),
+            'modversionCount' => Modversion::count(),
+        ]);
+    }
+
+    public function postRepository(): RedirectResponse
+    {
+        $this->authorize('update', Modversion::class);
+
+        $taskId = TaskTracker::create(Auth::id(), 'Checking the mod repository');
+
+        try {
+            dispatch(new CheckModRepository($taskId));
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
+        return TaskTracker::get($taskId)['status'] === 'completed'
+            ? redirect()->route('solder.repository', ['task' => $taskId])
+            : redirect()->route('task.show', $taskId);
+    }
+
+    /**
+     * Store the current checksum and size of files that changed on purpose.
+     */
+    public function postRepositoryFix(): RedirectResponse
+    {
+        $this->authorize('update', Modversion::class);
+
+        $updated = 0;
+        $errors = [];
+
+        foreach (Modversion::with('mod')->whereIn('id', (array) Request::input('modversions', []))->get() as $modversion) {
+            $actual = ModRepository::checksum($modversion);
+
+            if (! $actual['success']) {
+                $errors[] = "{$modversion->mod->name} {$modversion->version}: {$actual['message']}";
+
+                continue;
+            }
+
+            $modversion->update(['md5' => $actual['md5'], 'filesize' => $actual['filesize']]);
+            $updated++;
+        }
+
+        $redirect = redirect()->route('solder.repository', array_filter(['task' => Request::input('task')]))
+            ->with('success', "Updated the stored checksum of $updated mod ".Str::plural('version', $updated).'.');
+
+        return empty($errors) ? $redirect : $redirect->withErrors($errors);
     }
 
     public function getUpdate(): View
