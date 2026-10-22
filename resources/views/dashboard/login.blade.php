@@ -9,14 +9,17 @@
     @include('partial.dark-mode-script')
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
-<body class="bg-gray-50 dark:bg-gray-950 min-h-screen flex items-center justify-center p-4">
+<body class="auth-shell text-gray-900 dark:text-gray-100 min-h-screen flex items-center justify-center p-4">
     <div class="w-full max-w-sm" x-data>
         <div class="text-center mb-8">
-            <img src="{{ asset('img/wrenchIcon.svg') }}" alt="Solder" class="h-16 mx-auto mb-4">
-            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Technic Solder</h1>
+            <div class="mx-auto mb-5 size-14 rounded-2xl bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 flex items-center justify-center">
+                <img src="{{ asset('img/wrenchIcon.svg') }}" alt="Solder" class="size-8">
+            </div>
+            <h1 class="text-xl font-semibold text-gray-950 dark:text-white">Sign in to Solder</h1>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Manage your Technic modpacks</p>
         </div>
 
-        <div class="ui-card p-6">
+        <div class="ui-card p-6 sm:p-8">
             @error('email')
                 <div class="ui-alert ui-alert-danger mb-4 p-3">
                     {{ $message }}

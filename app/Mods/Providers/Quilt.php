@@ -2,123 +2,46 @@
 
 namespace App\Mods\Providers;
 
-use App\Mods\ImportedModData;
-use App\Mods\ModProvider;
-
-class Quilt extends ModProvider
+/**
+ * Quilt Loader, packaged like Fabric as bin/version.json from Quilt Meta.
+ */
+class Quilt extends Fabric
 {
     public static function name(): string
     {
-        return "Quilt";
+        return 'Quilt';
     }
 
     protected static function apiUrl(): string
     {
-        return "https://meta.quiltmc.org";
+        return 'https://meta.quiltmc.org/v3';
     }
 
-    protected static function zipFolder(): string
+    protected static function slug(): string
     {
-        return "bin";
+        return 'quilt-loader';
     }
 
-    protected static function useRawVersion(): bool
+    protected static function authors(): string
     {
-        return true;
+        return 'QuiltMC';
     }
 
-    public static function search(string $query, int $page = 1, string $gameVersion = '', string $loader = ''): object
+    protected static function websiteUrl(): string
     {
-        $mods = [];
-        $data = static::request("/v3/versions/game") ?? [];
-
-        foreach ($data as $mod) {
-            if (empty($mod->stable)) {
-                continue;
-            }
-
-            if (!empty($query) && stripos($mod->version ?? '', $query) === false) {
-                continue;
-            }
-
-            if (!empty($gameVersion) && stripos($mod->version ?? '', $gameVersion) === false) {
-                continue;
-            }
-
-            $mods[] = static::generateModData($mod);
-        }
-
-        return (object) [
-            'mods' => $mods,
-            'pagination' => (object) [
-                'currentPage' => 1,
-                'totalPages' => 1,
-                'totalItems' => count($mods),
-            ],
-        ];
+        return 'https://quiltmc.org/';
     }
 
-    public static function mod(string $modId): ?ImportedModData
+    protected static function thumbnailUrl(): string
     {
-        $data = static::request("/v3/versions/game") ?? [];
-
-        $foundMod = null;
-
-        foreach ($data as $mod) {
-            if (isset($mod->version) && $mod->version === $modId) {
-                $foundMod = $mod;
-                break;
-            }
-        }
-
-        if (!$foundMod) {
-            return null;
-        }
-
-        $foundMod->versions = static::request("/v3/versions/loader") ?? [];
-
-        return static::generateModData($foundMod);
+        return 'https://quiltmc.org/assets/img/logo.svg';
     }
 
-    private static function generateModData($mod): ImportedModData
+    /**
+     * Quilt Meta has no stable flag; pre-releases carry a "-beta"/"-pre" suffix instead.
+     */
+    protected static function isStable(object $loader): bool
     {
-        $modData = new ImportedModData();
-
-        $version = $mod->version ?? 'unknown';
-
-        $modData->id = $version;
-        $modData->slug = "quilt-loader";
-
-        $modData->name = "Quilt Loader";
-        $modData->summary = "Quilt Loader for Minecraft";
-
-        $modData->displayName = "Quilt Loader {$version}";
-        $modData->displaySummary = "Quilt Loader for Minecraft {$version}";
-
-        $modData->authors = "QuiltMC";
-
-        $modData->thumbnailUrl = "https://quiltmc.org/assets/img/logo.svg";
-        $modData->thumbnailDesc = "QuiltMC";
-        $modData->websiteUrl = "https://quiltmc.org/";
-
-        $modData->versions = [];
-
-        if (!empty($mod->versions) && is_iterable($mod->versions)) {
-            foreach ($mod->versions as $versionObj) {
-                $ver = $versionObj->version ?? 'unknown';
-                $game = $mod->version ?? 'unknown';
-
-                $key = "{$game}-{$ver}";
-
-                $modData->versions[$key] = (object) [
-                    "url"          => static::apiUrl()
-                        . "/v3/versions/loader/{$game}/{$ver}/profile/json",
-                    "filename"     => "version.json",
-                    "gameVersions" => [$game],
-                ];
-            }
-        }
-
-        return $modData;
+        return ! preg_match('/-(beta|pre|rc|alpha)/i', $loader->version ?? '');
     }
 }

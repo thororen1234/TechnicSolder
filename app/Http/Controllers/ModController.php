@@ -99,40 +99,35 @@ class ModController extends Controller
         return redirect('mod/view/'.$mod->id);
     }
 
-    public function getImport($provider = "", $query = "")
+    public function getImport($provider = '', $query = ''): View
     {
+        $this->authorize('create', Mod::class);
+
         $providers = ModProviders::providers();
 
-        $provider = Request::query('provider', $provider);
-        $query    = Request::query('query', $query);
-
-        if (empty($provider)) {
-            $provider = array_key_first($providers);
-        }
-
-        $gameVersion = Request::query('game_version', '');
-        $releaseType = Request::query('release_type', 'release');
-        $loader      = Request::query('loader', '');
+        $provider = (string) Request::query('provider', $provider) ?: array_key_first($providers);
+        $query = (string) Request::query('query', $query);
+        $gameVersion = (string) Request::query('game_version', '');
+        $releaseType = (string) Request::query('release_type', 'release');
+        $loader = (string) Request::query('loader', '');
+        $page = max(1, (int) Request::query('page', 1));
 
         $search = (object) [
             'mods' => [],
             'pagination' => (object) [
                 'currentPage' => 1,
                 'totalPages' => 1,
-                'totalItems' => 0
-            ]
+                'totalItems' => 0,
+            ],
         ];
 
         $errors = [];
 
-        if (!array_key_exists($provider, $providers)) {
+        if (! array_key_exists($provider, $providers)) {
             $errors['invalid_provider'] = 'Invalid provider specified';
         } else {
-            $search = $providers[$provider]::search($query, Request::query('page', 1), $gameVersion, $loader);
-
-            if (property_exists($search, "errors")) {
-                $errors = array_merge($errors, $search->errors);
-            }
+            $search = $providers[$provider]::search($query, $page, $gameVersion, $loader);
+            $errors = array_merge($errors, $search->errors ?? []);
         }
 
         return view('mod.import')
@@ -144,109 +139,107 @@ class ModController extends Controller
                 'releaseType' => $releaseType,
                 'loader' => $loader,
                 'mods' => $search->mods,
-                'pagination' => $search->pagination
+                'pagination' => $search->pagination,
             ])
             ->withErrors(Session::has('errors')
                 ? Session::get('errors')->merge($errors)
                 : $errors);
     }
 
-    public function getImportDetails($provider, $modId)
+    public function getImportDetails($provider, $modId): View|RedirectResponse
     {
-        $mod = ModProviders::providers()[$provider]::mod($modId);
-        if ($mod == null) {
-            return redirect()->back()->withErrors(['Mod not found']);
+        $this->authorize('create', Mod::class);
+
+        $providers = ModProviders::providers();
+        if (! isset($providers[$provider])) {
+            return redirect('mod/import')->withErrors(['invalid_provider' => 'Invalid provider selected']);
+        }
+
+        $gameVersion = (string) Request::query('game_version', '');
+        $loader = (string) Request::query('loader', '');
+
+        $mod = $providers[$provider]::modFor($modId, $gameVersion, $loader);
+        if ($mod === null) {
+            return redirect('mod/import?provider='.urlencode($provider))
+                ->withErrors(['mod_not_found' => 'Could not load that mod from '.$providers[$provider]::name().'.']);
         }
 
         return view('mod.import_details')
             ->with([
-                'mod' => $mod
+                'mod' => $mod,
+                'provider' => $provider,
+                'providerName' => $providers[$provider]::name(),
+                'gameVersion' => $gameVersion,
+                'loader' => $loader,
             ]);
     }
 
-    public function postImportDetails($provider, $modId)
+    public function postImportDetails($provider, $modId): RedirectResponse
     {
+        $this->authorize('create', Mod::class);
+
         $providers = ModProviders::providers();
+        $detailsUrl = "mod/import/details/$provider/$modId";
 
-        if (!isset($providers[$provider])) {
-            return redirect()->back()->withErrors([
-                'invalid_provider' => 'Invalid provider selected'
-            ]);
-        }
-
-        $modData = $providers[$provider]::mod($modId);
-
-        if (!$modData || !isset($modData->versions)) {
-            return redirect()->back()->withErrors([
-                'mod_not_found' => 'Mod or versions could not be loaded'
-            ]);
+        if (! isset($providers[$provider])) {
+            return redirect('mod/import')->withErrors(['invalid_provider' => 'Invalid provider selected']);
         }
 
         $versions = [];
-        $errors = [];
-        $invalidVersion = false;
-
-        foreach (Request::all() as $version => $val) {
-            if ($val !== "on") {
-                continue;
+        foreach ((array) Request::input('versions', []) as $encoded) {
+            $decoded = base64_decode((string) $encoded, true);
+            if ($decoded !== false) {
+                $versions[] = $decoded;
             }
-
-            $decoded = base64_decode($version, true);
-
-            if ($decoded === false) {
-                $invalidVersion = true;
-                continue;
-            }
-
-            if (!array_key_exists($decoded, $modData->versions)) {
-                $invalidVersion = true;
-            }
-
-            $versions[] = $decoded;
         }
 
         if (empty($versions)) {
-            $errors["no_versions"] = "No versions were specified to import";
+            return redirect($detailsUrl)->withErrors(['no_versions' => 'Select at least one version to import']);
         }
 
-        if ($invalidVersion) {
-            $errors["invalid_versions"] = "Invalid versions specified";
+        $modData = $providers[$provider]::modFor($modId, (string) Request::input('game_version', ''), (string) Request::input('loader', ''));
+        if ($modData === null) {
+            return redirect($detailsUrl)->withErrors(['mod_not_found' => 'Mod or versions could not be loaded']);
         }
 
-        $installData = (object) [
-            "success" => false,
-            "id" => -1,
-            "errors" => []
-        ];
-
-        if (empty($errors)) {
-            $installData = $providers[$provider]::install($modId, $versions);
-
-            if (!empty($installData->errors)) {
-                $errors = array_merge($errors, $installData->errors);
-            }
+        if (array_diff($versions, array_map('strval', array_keys($modData->versions)))) {
+            return redirect($detailsUrl)->withErrors(['invalid_versions' => 'Invalid versions specified']);
         }
 
-        $url = $installData->success
-            ? 'mod/view/' . $installData->id
-            : "mod/import/details/$provider/$modId";
+        set_time_limit(0);
 
-        return !empty($errors)
-            ? redirect($url)->withErrors($errors)
-            : redirect($url);
+        $result = $providers[$provider]::install($modId, $versions, $modData);
+
+        if (! $result->success) {
+            return redirect($detailsUrl)->withErrors($result->errors);
+        }
+
+        $message = trim(
+            ($result->created ? "Imported {$result->created} ".Str::plural('version', $result->created).'. ' : '')
+            .($result->existing ? "{$result->existing} ".Str::plural('version', $result->existing).' already existed.' : '')
+        );
+
+        $redirect = redirect('mod/view/'.$result->id);
+        if ($message !== '') {
+            $redirect->with('success', $message);
+        }
+
+        return empty($result->errors) ? $redirect : $redirect->withErrors($result->errors);
     }
 
     public function postImportBatch(): RedirectResponse
     {
+        $this->authorize('create', Mod::class);
+
         $providers = ModProviders::providers();
 
-        $provider    = Request::input('provider', '');
-        $gameVersion = Request::input('game_version', '');
-        $releaseType = Request::input('release_type', 'release');
-        $loader      = Request::input('loader', '');
-        $modIds      = Request::input('mods', []);
+        $provider = (string) Request::input('provider', '');
+        $gameVersion = (string) Request::input('game_version', '');
+        $releaseType = (string) Request::input('release_type', 'release');
+        $loader = (string) Request::input('loader', '');
+        $modIds = array_filter((array) Request::input('mods', []), 'is_scalar');
 
-        if (!isset($providers[$provider])) {
+        if (! isset($providers[$provider])) {
             return redirect()->back()->withErrors(['invalid_provider' => 'Invalid provider selected']);
         }
 
@@ -254,48 +247,53 @@ class ModController extends Controller
             return redirect()->back()->withErrors(['no_mods' => 'No mods selected for import']);
         }
 
+        set_time_limit(0);
+
         $errors = [];
         $importedCount = 0;
 
         foreach ($modIds as $modId) {
-            $modData = $providers[$provider]::mod($modId);
+            $modId = (string) $modId;
+            $modData = $providers[$provider]::modFor($modId, $gameVersion, $loader);
 
-            if (!$modData || empty($modData->versions)) {
+            if (! $modData || empty($modData->versions)) {
                 $errors[] = "Could not load versions for mod ID: $modId";
+
                 continue;
             }
 
-            $version = $providers[$provider]::latestStableVersionForGame($modData->versions, $gameVersion, $releaseType);
+            $version = $providers[$provider]::latestStableVersionForGame($modData->versions, $gameVersion, $releaseType, $loader);
 
             if ($version === null) {
-                $label = $modData->name ?? $modId;
                 $typePart = $releaseType !== '' && $releaseType !== 'any' ? " $releaseType" : '';
-                $gamePart = !empty($gameVersion) ? " for $gameVersion" : '';
-                $errors[] = "No{$typePart} version found for $label{$gamePart}";
+                $gamePart = $gameVersion !== '' ? " for $gameVersion" : '';
+                $loaderPart = $loader !== '' ? " ($loader)" : '';
+                $errors[] = "No{$typePart} version found for {$modData->name}{$gamePart}{$loaderPart}";
+
                 continue;
             }
 
-            $installData = $providers[$provider]::install($modId, [$version]);
+            $result = $providers[$provider]::install($modId, [$version], $modData);
 
-            if (!empty($installData->errors)) {
-                $errors = array_merge($errors, array_values($installData->errors));
+            if (! empty($result->errors)) {
+                $errors = array_merge($errors, $result->errors);
             } else {
                 $importedCount++;
             }
         }
 
-        $redirectUrl = 'mod/import?' . http_build_query(array_filter([
-            'provider'     => $provider,
+        $redirect = redirect('mod/import?'.http_build_query(array_filter([
+            'provider' => $provider,
             'game_version' => $gameVersion,
             'release_type' => $releaseType,
-            'loader'       => $loader,
-        ]));
+            'loader' => $loader,
+        ])));
 
-        $successMessage = $importedCount > 0 ? "$importedCount mod(s) imported successfully." : null;
+        if ($importedCount > 0) {
+            $redirect->with('success', "$importedCount ".Str::plural('mod', $importedCount).' imported successfully.');
+        }
 
-        return !empty($errors)
-            ? redirect($redirectUrl)->withErrors($errors)->with('success', $successMessage)
-            : redirect($redirectUrl)->with('success', $successMessage);
+        return empty($errors) ? $redirect : $redirect->withErrors($errors);
     }
 
     public function getDelete($mod_id = null)

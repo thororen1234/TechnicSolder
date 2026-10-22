@@ -2,13 +2,16 @@
 
 namespace Tests\Feature;
 
+use App\Models\Mod;
 use App\Models\User;
 use App\Mods\ModProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\FakesModProviders;
 use Tests\TestCase;
 
 final class ModImportBatchTest extends TestCase
 {
+    use FakesModProviders;
     use RefreshDatabase;
 
     protected function setUp(): void
@@ -19,6 +22,17 @@ final class ModImportBatchTest extends TestCase
 
         $user = User::find(1);
         $this->be($user);
+
+        $this->setUpModRepository();
+        $this->fakeFabricMeta();
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function importedFabricVersions(): array
+    {
+        return Mod::where('name', 'fabric-loader')->first()?->versions()->pluck('version')->all() ?? [];
     }
 
     public function test_batch_import_no_mods_selected(): void
@@ -65,6 +79,21 @@ final class ModImportBatchTest extends TestCase
 
         $response->assertSessionHasNoErrors();
         $response->assertSessionHas('success');
+        // Laravel turns the empty game_version into null; it must not reach the provider as one
+        $this->assertSame(['1.18.2-0.15.0'], $this->importedFabricVersions());
+    }
+
+    public function test_batch_import_release_skips_unstable_loaders(): void
+    {
+        $response = $this->post('/mod/import/batch', [
+            'provider' => 'fabric',
+            'game_version' => '1.18.2',
+            'release_type' => 'release',
+            'mods' => ['1.18.2'],
+        ]);
+
+        $response->assertSessionHasNoErrors();
+        $this->assertSame(['1.18.2-0.14.9'], $this->importedFabricVersions());
     }
 
     public function test_batch_import_nonexistent_game_version(): void
@@ -88,8 +117,9 @@ final class ModImportBatchTest extends TestCase
             'mods' => ['1.18.2'],
         ]);
 
-        // Fabric loader has no beta versions, so this should report an error
-        $response->assertSessionHasErrors();
+        // Unstable Fabric loader builds count as beta
+        $response->assertSessionHasNoErrors();
+        $this->assertSame(['1.18.2-0.15.0'], $this->importedFabricVersions());
     }
 
     // --- latestStableVersionForGame unit tests ---
@@ -112,7 +142,7 @@ final class ModImportBatchTest extends TestCase
     {
         $versions = [
             '2.0.0-beta' => (object) ['gameVersions' => ['1.19.2'], 'versionType' => 'beta'],
-            '1.9.0'      => (object) ['gameVersions' => ['1.19.2'], 'versionType' => 'release'],
+            '1.9.0' => (object) ['gameVersions' => ['1.19.2'], 'versionType' => 'release'],
         ];
 
         $this->assertSame('1.9.0', ModProvider::latestStableVersionForGame($versions, '1.19.2'));
@@ -150,7 +180,7 @@ final class ModImportBatchTest extends TestCase
     {
         $versions = [
             '2.0.0-beta' => (object) ['gameVersions' => ['1.19.2'], 'versionType' => 'beta'],
-            '1.9.0'      => (object) ['gameVersions' => ['1.19.2'], 'versionType' => 'release'],
+            '1.9.0' => (object) ['gameVersions' => ['1.19.2'], 'versionType' => 'release'],
         ];
 
         $this->assertSame('1.9.0', ModProvider::latestStableVersionForGame($versions, '1.19.2', 'release'));
@@ -169,7 +199,7 @@ final class ModImportBatchTest extends TestCase
     {
         $versions = [
             '2.0.0-beta' => (object) ['gameVersions' => ['1.19.2'], 'versionType' => 'beta'],
-            '1.9.0'      => (object) ['gameVersions' => ['1.19.2'], 'versionType' => 'release'],
+            '1.9.0' => (object) ['gameVersions' => ['1.19.2'], 'versionType' => 'release'],
         ];
 
         $this->assertSame('2.0.0-beta', ModProvider::latestStableVersionForGame($versions, '1.19.2', 'beta'));
@@ -179,7 +209,7 @@ final class ModImportBatchTest extends TestCase
     {
         $versions = [
             '2.0.0-beta' => (object) ['gameVersions' => ['1.19.2'], 'versionType' => 'beta'],
-            '1.9.0'      => (object) ['gameVersions' => ['1.19.2'], 'versionType' => 'release'],
+            '1.9.0' => (object) ['gameVersions' => ['1.19.2'], 'versionType' => 'release'],
         ];
 
         $this->assertSame('2.0.0-beta', ModProvider::latestStableVersionForGame($versions, '1.19.2', 'any'));

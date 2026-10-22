@@ -10,16 +10,34 @@
     {{-- Build info card --}}
     <div class="ui-card mb-6">
         <div class="ui-card-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <span class="font-semibold text-gray-900 dark:text-white">{{ $build->modpack->name }} &mdash; build {{ $build->version }}</span>
+            <span class="font-semibold text-gray-900 dark:text-white">{{ $build->modpack->name }} - build {{ $build->version }}</span>
             <div class="flex items-center gap-2">
                 <button onclick="window.location.reload()"
                         class="ui-btn ui-btn-sm ui-btn-primary">
                     Refresh
                 </button>
-                <a href="{{ url('modpack/build/' . $build->id . '/export') }}"
-                   class="ui-btn ui-btn-sm ui-btn-primary">
-                    Export CSV
-                </a>
+                <div class="relative" x-data="{ open: false }" @keydown.escape="open = false">
+                    <button type="button" @click="open = !open" @click.outside="open = false"
+                            class="ui-btn ui-btn-sm ui-btn-primary" :aria-expanded="open">
+                        Export
+                        <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>
+                    </button>
+                    <div x-show="open" x-transition.opacity.duration.100ms style="display: none"
+                         class="ui-menu absolute right-0 z-20 mt-1 w-72">
+                        @foreach (App\Services\PackExportService::FORMATS as $format => $exportFormat)
+                            <a href="{{ route('modpack.build.export.archive', ['build_id' => $build->id, 'format' => $format]) }}"
+                               class="ui-menu-item flex-col items-start! gap-0!" @click="open = false">
+                                <span class="font-medium text-gray-950 dark:text-white">{{ $exportFormat['label'] }}</span>
+                                <span class="text-xs text-gray-500">{{ $exportFormat['description'] }}</span>
+                            </a>
+                        @endforeach
+                        <div class="my-1 h-px bg-gray-100 dark:bg-gray-900"></div>
+                        <a href="{{ url('modpack/build/' . $build->id . '/export') }}" class="ui-menu-item flex-col items-start! gap-0!">
+                            <span class="font-medium text-gray-950 dark:text-white">Mod list (.csv)</span>
+                            <span class="text-xs text-gray-500">Names, versions and checksums</span>
+                        </a>
+                    </div>
+                </div>
                 <a href="{{ url('modpack/build/' . $build->id . '/edit') }}"
                    class="ui-btn ui-btn-sm ui-btn-primary">
                     Edit

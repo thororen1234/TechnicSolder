@@ -10,6 +10,7 @@ use App\Models\Client;
 use App\Models\Mod;
 use App\Models\Modpack;
 use App\Models\Modversion;
+use App\Services\PackExportService;
 use App\Services\PackImportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -22,6 +23,7 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ModpackController extends Controller
@@ -117,6 +119,43 @@ class ModpackController extends Controller
             fclose($handle);
         }, $filename, [
             'Content-Type' => 'text/csv',
+        ]);
+    }
+
+    public function getExportBuildArchive(PackExportService $exporter, $build_id, string $format): BinaryFileResponse|RedirectResponse
+    {
+        $build = Build::with('modpack', 'modversions.mod')->find($build_id);
+
+        if (empty($build)) {
+            return redirect('modpack/list')->withErrors(['Build not found']);
+        }
+
+        $this->authorize('update', [Build::class, $build->modpack]);
+
+        // Large packs take a while to assemble
+        set_time_limit(0);
+
+        $export = $exporter->exportBuild($build, $format);
+
+        return response()->download($export['path'], $export['filename'])->deleteFileAfterSend();
+    }
+
+    public function getExportModpack(PackExportService $exporter, $modpack_id): StreamedResponse|RedirectResponse
+    {
+        $modpack = Modpack::find($modpack_id);
+
+        if (empty($modpack)) {
+            return redirect('modpack/list')->withErrors(['Modpack not found']);
+        }
+
+        $this->authorize('update', $modpack);
+
+        $backup = json_encode($exporter->backup($modpack), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+        return response()->streamDownload(function () use ($backup) {
+            echo $backup;
+        }, "{$modpack->slug}-solder-backup.json", [
+            'Content-Type' => 'application/json',
         ]);
     }
 
@@ -383,8 +422,8 @@ class ModpackController extends Controller
         $source = Request::input('source');
 
         $rules = [
-            'name'   => 'required',
-            'slug'   => 'required|unique:modpacks|alpha_dash',
+            'name' => 'required',
+            'slug' => 'required|unique:modpacks|alpha_dash',
             'source' => 'required|in:file,url',
         ];
 
@@ -402,7 +441,10 @@ class ModpackController extends Controller
         $name = Request::input('name');
         $slug = Str::slug(Request::input('slug'));
 
-        $service = new PackImportService();
+        // Every mod in the pack is downloaded during this request
+        set_time_limit(0);
+
+        $service = new PackImportService;
 
         if (Request::input('source') === 'file') {
             $result = $service->importFromFile(Request::file('file'), $name, $slug);

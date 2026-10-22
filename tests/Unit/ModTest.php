@@ -6,10 +6,13 @@ use App\Models\Mod;
 use App\Models\Modversion;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
+use Tests\FakesModProviders;
 use Tests\TestCase;
 
 final class ModTest extends TestCase
 {
+    use FakesModProviders;
     use RefreshDatabase;
 
     protected function setUp(): void
@@ -449,8 +452,19 @@ final class ModTest extends TestCase
         ]);
     }
 
+    private function fakeModImportProviders(): void
+    {
+        $this->setUpModRepository();
+        $this->fakeFabricMeta();
+        Http::fake([
+            'api.modrinth.com/v2/search*' => Http::response(['hits' => [], 'total_hits' => 0]),
+        ]);
+    }
+
     public function test_mod_import_get_search_default()
     {
+        $this->fakeModImportProviders();
+
         $response = $this->get('/mod/import');
 
         $response->assertOk();
@@ -458,55 +472,77 @@ final class ModTest extends TestCase
 
     public function test_mod_import_get_search_specific()
     {
+        $this->fakeModImportProviders();
+
         $response = $this->get('/mod/import/fabric');
 
         $response->assertOk();
+        $response->assertSee('Fabric Loader 1.18.2');
     }
 
     public function test_mod_import_details_get()
     {
+        $this->fakeModImportProviders();
+
         $response = $this->get('/mod/import/details/fabric/1.18.2');
 
         $response->assertOk();
+        $response->assertSee('Fabric Loader 1.18.2');
     }
 
-    public function test_mod_import_details_post_no_versions()
+    public function test_mod_import_details_get_unknown_provider()
     {
-        $data = [
-            base64_encode("9.9.9-9.9.9") => 'off',
-        ];
+        $this->fakeModImportProviders();
 
-        $response = $this->post('/mod/import/details/fabric/1.18.2', $data);
-        $response->assertSessionHasErrors('no_versions');
+        $response = $this->get('/mod/import/details/nope/1.18.2');
+
+        $response->assertRedirect('mod/import');
+        $response->assertSessionHasErrors('invalid_provider');
+    }
+
+    public function test_mod_import_details_post_invalid_versions()
+    {
+        $this->fakeModImportProviders();
+
+        $response = $this->post('/mod/import/details/fabric/1.18.2', [
+            'versions' => [base64_encode('9.9.9-9.9.9')],
+        ]);
+
+        $response->assertSessionHasErrors('invalid_versions');
     }
 
     public function test_mod_import_details_post_no_versions_empty()
     {
+        $this->fakeModImportProviders();
+
         $response = $this->post('/mod/import/details/fabric/1.18.2', []);
         $response->assertSessionHasErrors('no_versions');
     }
 
     public function test_mod_import_details_post()
     {
-        $data = [
-            base64_encode("1.18.2-0.14.9") => 'on',
-        ];
+        $this->fakeModImportProviders();
 
-        $response = $this->post('/mod/import/details/fabric/1.18.2', $data);
+        $response = $this->post('/mod/import/details/fabric/1.18.2', [
+            'versions' => [base64_encode('1.18.2-0.14.9')],
+        ]);
+
         $response->assertRedirect('/mod/view/3');
         $response->assertSessionHasNoErrors();
+        $response->assertSessionHas('success', 'Imported 1 version.');
     }
 
     public function test_mod_import_details_post_version_exists()
     {
         $this->test_mod_import_details_post();
 
-        $data = [
-            base64_encode("1.18.2-0.14.9") => 'on',
-        ];
+        $response = $this->post('/mod/import/details/fabric/1.18.2', [
+            'versions' => [base64_encode('1.18.2-0.14.9')],
+        ]);
 
-        $response = $this->post('/mod/import/details/fabric/1.18.2', $data);
         $response->assertRedirect('/mod/view/3');
-        $response->assertSessionHasErrors('version_exists');
+        $response->assertSessionHasNoErrors();
+        $response->assertSessionHas('success', '1 version already existed.');
+        $this->assertSame(1, Modversion::where('mod_id', 3)->count());
     }
 }

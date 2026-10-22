@@ -9,7 +9,7 @@
     @include('partial.dark-mode-script')
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
-<body class="bg-gray-50 dark:bg-gray-950 min-h-screen flex items-center justify-center p-4">
+<body class="auth-shell text-gray-900 dark:text-gray-100 min-h-screen flex items-center justify-center p-4">
     <div class="w-full max-w-sm" x-data>
         <div class="text-center mb-8">
             <img src="{{ asset('img/wrenchIcon.svg') }}" alt="Solder" class="h-16 mx-auto mb-4">

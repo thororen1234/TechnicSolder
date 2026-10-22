@@ -80,6 +80,10 @@ Alpine.data('dataTable', (config = {}) => ({
     init() {
         this.$watch('search', () => { this.page = 1; });
 
+        // Allow deep links such as /mod/list?q=forge (used by the command palette)
+        const query = new URLSearchParams(window.location.search).get('q');
+        if (query) this.search = query;
+
         const stored = localStorage.getItem(this.storageKey);
         if (stored) {
             try {
@@ -158,5 +162,182 @@ Alpine.data('dataTable', (config = {}) => ({
     prevPage() { if (this.page > 1) this.page--; },
     nextPage() { if (this.page < this.totalPages) this.page++; },
 }));
+
+// Pages offered by the command palette, grouped by nav section.
+const NAV_SECTIONS = [
+    { label: 'Overview', url: '/dashboard', links: [] },
+    {
+        label: 'Modpacks',
+        links: [
+            { label: 'All modpacks', url: '/modpack/list' },
+            { label: 'New modpack', url: '/modpack/create' },
+            { label: 'Import modpack', url: '/modpack/import' },
+        ],
+    },
+    {
+        label: 'Mods',
+        links: [
+            { label: 'All mods', url: '/mod/list' },
+            { label: 'New mod', url: '/mod/create' },
+            { label: 'Import mod', url: '/mod/import' },
+        ],
+    },
+    {
+        label: 'Settings',
+        links: [
+            { label: 'Configuration', url: '/solder/configure' },
+            { label: 'Updates', url: '/solder/update' },
+            { label: 'Users', url: '/user/list' },
+            { label: 'Clients', url: '/client/list' },
+            { label: 'Platform keys', url: '/key/list' },
+        ],
+    },
+]
+
+const pathMatches = (path, prefixes) => prefixes.some(prefix => path === prefix || path.startsWith(prefix + '/'))
+
+Alpine.data('shell', (config = {}) => ({
+    path: window.location.pathname,
+    // Resolved before first paint by the inline script in the layout <head>
+    section: document.documentElement.dataset.section || null,
+    modpacks: config.modpacks || [],
+    currentModpackId: config.currentModpackId ?? null,
+    isMac: /Mac|iPhone|iPad/.test(navigator.userAgent),
+    tip: { show: false, text: '', top: 0 },
+
+    init() {
+        if (this.currentModpackId === null) {
+            const match = this.path.match(/^\/modpack\/(?:view|edit|delete|clone|add-build)\/(\d+)/)
+            if (match) this.currentModpackId = Number(match[1])
+        }
+    },
+
+    isCurrent(prefixes) {
+        return pathMatches(this.path, prefixes)
+    },
+
+    showTip(el, text) {
+        const rect = el.getBoundingClientRect()
+        this.tip = { show: true, text, top: rect.top + rect.height / 2 }
+    },
+}))
+
+// ⌘K command palette: jump to pages and modpacks, or search mods/modpacks.
+Alpine.data('commandPalette', (config = {}) => ({
+    open: false,
+    query: '',
+    active: 0,
+    modpacks: config.modpacks || [],
+    profileUrl: config.profileUrl || null,
+
+    init() {
+        window.addEventListener('keydown', (e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+                e.preventDefault()
+                this.toggle()
+            }
+        })
+        this.$watch('query', () => { this.active = 0 })
+    },
+
+    toggle() {
+        this.open ? this.close() : this.show()
+    },
+
+    show() {
+        this.open = true
+        this.query = ''
+        this.active = 0
+        this.$nextTick(() => this.$refs.input?.focus())
+    },
+
+    close() {
+        this.open = false
+    },
+
+    get pages() {
+        const pages = []
+        NAV_SECTIONS.forEach(section => {
+            if (!section.links.length) {
+                pages.push({ label: section.label, hint: 'Page', url: section.url })
+            }
+            section.links.forEach(link => pages.push({ label: link.label, hint: section.label, url: link.url }))
+        })
+        if (this.profileUrl) pages.push({ label: 'Your profile', hint: 'Account', url: this.profileUrl })
+        return pages
+    },
+
+    get groups() {
+        const q = this.query.trim().toLowerCase()
+        const rank = (text) => {
+            const t = text.toLowerCase()
+            if (!q) return 1
+            if (t.startsWith(q)) return 0
+            if (t.includes(q)) return 1
+            return -1
+        }
+        const score = (keys) => {
+            const ranks = keys.filter(Boolean).map(rank).filter(r => r >= 0)
+            return ranks.length ? Math.min(...ranks) : -1
+        }
+        const filter = (items, keyFn, limit) => items
+            .map(item => ({ item, score: score(keyFn(item)) }))
+            .filter(r => r.score >= 0)
+            .sort((a, b) => a.score - b.score)
+            .slice(0, limit)
+            .map(r => r.item)
+
+        const groups = []
+
+        const modpacks = filter(this.modpacks, mp => [mp.name, mp.slug], q ? 8 : 5)
+            .map(mp => ({ type: 'modpack', label: mp.name, hint: mp.slug, url: '/modpack/view/' + mp.id, icon: mp.icon_url }))
+        if (modpacks.length) groups.push({ label: 'Modpacks', items: modpacks })
+
+        const pages = filter(this.pages, p => [p.label, p.hint], q ? 8 : 20)
+            .map(p => ({ type: 'page', ...p }))
+        if (pages.length) groups.push({ label: 'Go to', items: pages })
+
+        if (q) {
+            groups.push({
+                label: 'Search',
+                items: [
+                    { type: 'search', label: `Search mods for “${this.query.trim()}”`, url: '/mod/list?q=' + encodeURIComponent(this.query.trim()) },
+                    { type: 'search', label: `Search modpacks for “${this.query.trim()}”`, url: '/modpack/list?q=' + encodeURIComponent(this.query.trim()) },
+                ],
+            })
+        }
+
+        groups.push({
+            label: 'Actions',
+            items: filter([{ type: 'action', label: 'Toggle dark mode', hint: 'Theme', run: () => Alpine.store('darkMode').toggle() }], a => [a.label, a.hint], 1),
+        })
+
+        // Flat index for keyboard navigation
+        let index = 0
+        groups.forEach(g => g.items.forEach(item => { item.index = index++ }))
+        return groups.filter(g => g.items.length)
+    },
+
+    get flat() {
+        return this.groups.flatMap(g => g.items)
+    },
+
+    move(delta) {
+        const count = this.flat.length
+        if (!count) return
+        this.active = (this.active + delta + count) % count
+        this.$nextTick(() => this.$refs.list?.querySelector('[data-active="true"]')?.scrollIntoView({ block: 'nearest' }))
+    },
+
+    choose(item = this.flat[this.active]) {
+        if (!item) return
+        this.close()
+        if (item.run) {
+            item.run()
+        } else {
+            window.location.href = item.url
+        }
+    },
+}))
 
 Alpine.start()

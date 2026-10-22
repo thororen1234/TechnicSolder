@@ -83,7 +83,7 @@
                                 @if (Auth::id() === $user->id)
                                     Required only when setting a new password above.
                                 @else
-                                    Required only when setting a new password above &mdash; enter your own password, not {{ $user->username }}'s.
+                                    Required only when setting a new password above - enter your own password, not {{ $user->username }}'s.
                                 @endif
                             </p>
                         </div>
@@ -432,7 +432,7 @@
                                         Download codes
                                     </button>
                                     <span class="text-xs text-yellow-700 dark:text-yellow-400">
-                                        &mdash; these codes will not be shown again.
+                                        - these codes will not be shown again.
                                     </span>
                                 </div>
                             </div>
@@ -508,7 +508,7 @@
                 @session('newToken')
                     <div class="mb-4 p-4 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 max-w-2xl overflow-hidden">
                         <p class="text-sm font-medium text-yellow-800 dark:text-yellow-300 mb-1">
-                            Your new API token. Copy it now — it won't be shown again:
+                            Your new API token. Copy it now - it won't be shown again:
                         </p>
                         <div class="flex items-center gap-2">
                             <code class="text-xs font-mono text-yellow-900 dark:text-yellow-200 bg-yellow-100 dark:bg-yellow-900/40 px-2 py-1 rounded min-w-0 flex-1 truncate">{{ $value }}</code>

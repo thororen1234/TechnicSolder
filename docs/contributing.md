@@ -121,7 +121,7 @@ Do not reuse the forms plugin's `form-*` class names or introduce a Blade
 component just to wrap a styled native element. Preserve the dark-mode hex
 background workaround for 1Password.
 
-After stylesheet or template changes, run `npm run build` and update
+After stylesheet or template changes, run `pnpm run build` and update
 `public/build` in every running preview/deployment that serves the changed
 templates. A container with a separate build volume does not see host-built
 assets. Verify both themes and relevant interactive states in the browser;

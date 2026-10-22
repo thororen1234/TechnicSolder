@@ -5,21 +5,27 @@ namespace App\Mods\Providers;
 use App\Mods\ImportedModData;
 use App\Mods\ModProvider;
 
+/**
+ * NeoForge, packaged for Technic with its installer as bin/modpack.jar.
+ *
+ * Minecraft 1.20.1 builds were published as net.neoforged:forge ("1.20.1-47.1.106"); later builds as
+ * net.neoforged:neoforge, versioned after Minecraft: "21.1.263" is 1.21.1 and "26.3.0.95" is 26.3.
+ */
 class NeoForge extends ModProvider
 {
     public static function name(): string
     {
-        return "NeoForge";
+        return 'NeoForge';
     }
 
     protected static function apiUrl(): string
     {
-        return "https://maven.neoforged.net/releases/net/neoforged/neoforge";
+        return 'https://maven.neoforged.net/releases/net/neoforged';
     }
 
     protected static function zipFolder(): string
     {
-        return "bin";
+        return 'bin';
     }
 
     protected static function useRawVersion(): bool
@@ -27,111 +33,93 @@ class NeoForge extends ModProvider
         return true;
     }
 
-    private static function forgeApiUrl(): string
+    /**
+     * @return list<string>
+     */
+    private static function fetchMavenVersions(string $artifact): array
     {
-        return "https://maven.neoforged.net/releases/net/neoforged/forge";
-    }
-
-    private static function fetchMavenVersions(string $baseUrl): array
-    {
-        $curl_h = curl_init($baseUrl . '/maven-metadata.xml');
-        curl_setopt($curl_h, CURLOPT_HTTPHEADER, static::apiHeaders());
-        curl_setopt($curl_h, CURLOPT_RETURNTRANSFER, true);
-        $xml = curl_exec($curl_h);
-        curl_close($curl_h);
-
-        if (!$xml) {
+        $xml = static::request("/$artifact/maven-metadata.xml", true);
+        if (! $xml) {
             return [];
         }
 
-        libxml_use_internal_errors(true);
+        $previous = libxml_use_internal_errors(true);
         $data = simplexml_load_string($xml);
+        libxml_use_internal_errors($previous);
 
-        if (!$data || !isset($data->versioning->versions->version)) {
+        if (! $data || ! isset($data->versioning->versions->version)) {
             return [];
         }
 
         $versions = [];
-        foreach ($data->versioning->versions->version as $v) {
-            $versions[] = (string) $v;
+        foreach ($data->versioning->versions->version as $version) {
+            $versions[] = (string) $version;
         }
 
         return $versions;
     }
 
-    private static function getVersions(): array
+    /**
+     * Map a NeoForge version to the Minecraft version it targets.
+     */
+    public static function minecraftVersion(string $version): ?string
     {
-        $forgeVersions = array_values(array_filter(
-            static::fetchMavenVersions(static::forgeApiUrl()),
-            fn ($v) => (bool) preg_match('/^1\.\d+\.\d+-\d/', $v)
-        ));
+        // Legacy net.neoforged:forge builds carry the Minecraft version as a prefix
+        if (preg_match('/^(1\.\d+(?:\.\d+)?)-/', $version, $match)) {
+            return $match[1];
+        }
 
-        return array_merge($forgeVersions, static::fetchMavenVersions(static::apiUrl()));
+        if (! preg_match('/^(\d+)\.(\d+)\.(\d+)/', $version, $match)) {
+            return null;
+        }
+
+        [, $major, $minor, $patch] = array_map('intval', $match);
+
+        // Year-based Minecraft versions (26.1 and later): "{year}.{drop}.{hotfix}.{build}"
+        if ($major >= 25) {
+            return $patch > 0 ? "$major.$minor.$patch" : "$major.$minor";
+        }
+
+        // "{minor}.{patch}.{build}" for Minecraft 1.{minor}.{patch}
+        return $minor > 0 ? "1.$major.$minor" : "1.$major";
     }
 
-    private static function extractMcVersion(string $version): array
+    /**
+     * All builds grouped by Minecraft version, newest Minecraft version first, builds newest first.
+     *
+     * @return array<string, list<string>>
+     */
+    private static function getVersionsMap(): array
     {
-        if (preg_match('/^(1\.\d+(?:\.\d+)?)-(.+)$/', $version, $m)) {
-            return [$m[1], $version];
-        }
+        $legacy = array_filter(
+            self::fetchMavenVersions('forge'),
+            fn ($version) => (bool) preg_match('/^1\.\d+(?:\.\d+)?-\d/', $version)
+        );
 
-        if (preg_match('/^(\d+\.\d+\.\d+)\./', $version, $m)) {
-            return [$m[1], $version];
-        }
-
-        if (preg_match('/^(\d+)\.(\d+)\./', $version, $m)) {
-            return ["1.{$m[1]}.{$m[2]}", $version];
-        }
-
-        return ["unknown", $version];
-    }
-
-    private static function groupVersionsByMc(array $all, string $query = ''): array
-    {
         $grouped = [];
-
-        foreach ($all as $version) {
-            [$mc, $full] = static::extractMcVersion($version);
-
-            $mc = preg_replace('/-.*$/', '', $mc);
-
-            if (!preg_match('/^\d+\.\d+(\.\d+)?$/', $mc)) {
-                continue;
+        foreach ([...$legacy, ...self::fetchMavenVersions('neoforge')] as $version) {
+            $minecraft = static::minecraftVersion($version);
+            if ($minecraft !== null) {
+                $grouped[$minecraft][] = $version;
             }
-
-            if (!empty($query)) {
-                if ($mc !== $query && strpos($mc, $query . '.') !== 0) {
-                    continue;
-                }
-            }
-
-            $grouped[$mc] ??= [];
-            $grouped[$mc][] = $full;
         }
 
-        return $grouped;
+        uksort($grouped, fn ($a, $b) => version_compare($b, $a));
+
+        return array_map('array_reverse', $grouped);
     }
 
     public static function search(string $query, int $page = 1, string $gameVersion = '', string $loader = ''): object
     {
-        $all = static::getVersions();
-        $grouped = static::groupVersionsByMc($all, $query);
-
-        if (!empty($gameVersion)) {
-            $grouped = array_filter(
-                $grouped,
-                fn ($mc) => stripos($mc, $gameVersion) !== false,
-                ARRAY_FILTER_USE_KEY
-            );
-        }
-
-        uksort($grouped, fn ($a, $b) => version_compare($b, $a));
-        $grouped = array_map('array_reverse', $grouped);
-
         $mods = [];
 
-        foreach ($grouped as $mc => $versions) {
-            $mods[] = static::generateModData($mc, $versions);
+        foreach (self::getVersionsMap() as $minecraft => $versions) {
+            if (($query !== '' && $minecraft !== $query && ! str_starts_with($minecraft, $query.'.'))
+                || ($gameVersion !== '' && stripos($minecraft, $gameVersion) === false)) {
+                continue;
+            }
+
+            $mods[] = self::generateModData($minecraft, $versions);
         }
 
         return (object) [
@@ -139,63 +127,48 @@ class NeoForge extends ModProvider
             'pagination' => (object) [
                 'currentPage' => 1,
                 'totalPages' => 1,
-                'totalItems' => count($mods)
-            ]
+                'totalItems' => count($mods),
+            ],
         ];
     }
 
+    /**
+     * @param  string  $modId  Minecraft version
+     */
     public static function mod(string $modId): ?ImportedModData
     {
-        $all = static::getVersions();
+        $versions = self::getVersionsMap()[$modId] ?? null;
 
-        if (empty($all)) {
-            return null;
-        }
-
-        $grouped = static::groupVersionsByMc($all, $modId);
-
-        if (!isset($grouped[$modId])) {
-            return null;
-        }
-
-        return static::generateModData($modId, array_reverse($grouped[$modId]));
+        return $versions === null ? null : self::generateModData($modId, $versions);
     }
 
-    private static function generateModData($mcVersion, $versions): ImportedModData
+    private static function generateModData(string $minecraft, array $versions): ImportedModData
     {
-        $modData = new ImportedModData();
+        $modData = new ImportedModData;
 
-        $modData->id = $mcVersion;
-        $modData->slug = "neoforge";
-
-        $modData->name = "NeoForge";
-        $modData->summary = "NeoForge is the modern continuation of the Minecraft Forge modding ecosystem.";
-
-        $modData->displayName = "NeoForge ({$mcVersion})";
-        $modData->displaySummary = "NeoForge builds for {$mcVersion}";
-
-        $modData->authors = "NeoForged Team";
-
-        $modData->thumbnailUrl = "https://neoforged.net/img/authors/neoforged.png";
-        $modData->thumbnailDesc = "NeoForge";
-        $modData->websiteUrl = "https://neoforged.net/";
-
+        $modData->id = $minecraft;
+        $modData->slug = 'neoforge';
+        $modData->name = 'NeoForge';
+        $modData->summary = 'NeoForge is the modern continuation of the Minecraft Forge modding ecosystem.';
+        $modData->displayName = "NeoForge $minecraft";
+        $modData->displaySummary = "NeoForge builds for Minecraft $minecraft";
+        $modData->authors = 'NeoForged';
+        $modData->thumbnailUrl = 'https://neoforged.net/img/authors/neoforged.png';
+        $modData->thumbnailDesc = 'NeoForge';
+        $modData->websiteUrl = 'https://neoforged.net/';
         $modData->versions = [];
 
         foreach ($versions as $version) {
-            if (str_starts_with($version, '1.')) {
-                $modData->versions["forge-{$version}"] = (object) [
-                    "url"          => static::forgeApiUrl() . "/{$version}/forge-{$version}-installer.jar",
-                    "filename"     => "modpack.jar",
-                    "gameVersions" => [$mcVersion],
-                ];
-            } else {
-                $modData->versions["neoforge-{$version}"] = (object) [
-                    "url"          => static::apiUrl() . "/{$version}/neoforge-{$version}-installer.jar",
-                    "filename"     => "modpack.jar",
-                    "gameVersions" => [$mcVersion],
-                ];
-            }
+            $isLegacy = str_starts_with($version, '1.');
+            $artifact = $isLegacy ? 'forge' : 'neoforge';
+
+            $modData->versions["$artifact-$version"] = (object) [
+                'url' => static::apiUrl()."/$artifact/$version/$artifact-$version-installer.jar",
+                'filename' => 'modpack.jar',
+                'label' => $version,
+                'gameVersions' => [$minecraft],
+                'versionType' => preg_match('/-(beta|alpha)/i', $version) ? 'beta' : 'release',
+            ];
         }
 
         return $modData;

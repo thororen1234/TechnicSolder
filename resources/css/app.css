@@ -13,39 +13,145 @@ html.dark {
 /* 1Password can't parse oklch backgrounds for theme detection.
    Provide a hex fallback so autofill styling matches dark mode.
    https://1password.community/discussions/developers/161487 */
-.dark input, .dark select, .dark textarea {
-    background-color: #27272a; /* zinc-800 */
+.dark input:not([type="file"]), .dark select, .dark textarea {
+    background-color: #0a0a0a; /* gray-950 */
+}
+
+[x-cloak] {
+    display: none !important;
 }
 
 @theme {
     --font-sans: 'Inter', 'Inter fallback', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 
-    /* Override default gray (blue-tinted) with zinc values (neutral) */
-    --color-gray-50: oklch(0.985 0.002 247.839);
-    --color-gray-100: oklch(0.967 0.001 264.542);
-    --color-gray-200: oklch(0.920 0.004 264.531);
-    --color-gray-300: oklch(0.871 0.006 264.531);
-    --color-gray-400: oklch(0.705 0.015 286.067);
-    --color-gray-500: oklch(0.552 0.016 285.938);
-    --color-gray-600: oklch(0.442 0.017 285.786);
-    --color-gray-700: oklch(0.371 0.013 285.805);
-    --color-gray-800: oklch(0.274 0.006 286.033);
-    --color-gray-900: oklch(0.210 0.006 285.885);
-    --color-gray-950: oklch(0.141 0.005 285.823);
+    /* Pure neutral grays for the monochrome look */
+    --color-gray-50: oklch(0.985 0 0);
+    --color-gray-100: oklch(0.97 0 0);
+    --color-gray-200: oklch(0.922 0 0);
+    --color-gray-300: oklch(0.87 0 0);
+    --color-gray-400: oklch(0.708 0 0);
+    --color-gray-500: oklch(0.556 0 0);
+    --color-gray-600: oklch(0.439 0 0);
+    --color-gray-700: oklch(0.371 0 0);
+    --color-gray-800: oklch(0.269 0 0);
+    --color-gray-900: oklch(0.205 0 0);
+    --color-gray-925: oklch(0.175 0 0);
+    --color-gray-950: oklch(0.145 0 0);
+    --color-gray-975: oklch(0.1 0 0);
+
+    --shadow-float: 0 0 0 1px rgb(0 0 0 / 0.04), 0 8px 24px -6px rgb(0 0 0 / 0.16), 0 2px 6px -2px rgb(0 0 0 / 0.08);
+}
+
+@layer base {
+    body {
+        @apply antialiased;
+    }
+
+    h1, h2, h3 {
+        @apply tracking-tight;
+    }
+
+    ::selection {
+        @apply bg-blue-500/20;
+    }
+
+    * {
+        scrollbar-width: thin;
+        scrollbar-color: var(--color-gray-300) transparent;
+    }
+
+    .dark * {
+        scrollbar-color: var(--color-gray-800) transparent;
+    }
+
+    a, button, summary, [tabindex] {
+        @apply focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500;
+    }
 }
 
 @layer components {
+    /* ---------- Surfaces ---------- */
+
+    .app-bg {
+        @apply bg-gray-50 dark:bg-gray-975;
+    }
+
+    /* Centered standalone pages: login, password reset, errors */
+    .auth-shell {
+        @apply relative bg-gray-50 dark:bg-gray-975;
+    }
+
+    .auth-shell::before {
+        content: '';
+        @apply fixed inset-0 -z-10 pointer-events-none;
+        background-image: radial-gradient(circle at 1px 1px, rgb(0 0 0 / 0.09) 1px, transparent 0);
+        background-size: 22px 22px;
+        mask-image: radial-gradient(ellipse 60% 55% at 50% 45%, black 30%, transparent 100%);
+    }
+
+    .dark .auth-shell::before {
+        background-image: radial-gradient(circle at 1px 1px, rgb(255 255 255 / 0.09) 1px, transparent 0);
+    }
+
+    .ui-card,
+    .ui-stat {
+        @apply bg-white dark:bg-gray-950 rounded-xl border border-gray-200 dark:border-gray-800;
+    }
+
+    .auth-shell .ui-card {
+        @apply shadow-float dark:shadow-none;
+    }
+
+    .ui-card-header {
+        @apply px-5 py-3.5 border-b border-gray-200 dark:border-gray-800;
+    }
+
+    /* ---------- Page header ---------- */
+
+    .page-header {
+        @apply flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-8;
+    }
+
+    .page-title {
+        @apply text-2xl font-semibold tracking-tight text-gray-950 dark:text-white;
+    }
+
+    .page-subtitle {
+        @apply mt-1 text-sm text-gray-500 dark:text-gray-400;
+    }
+
+    .section-title {
+        @apply text-sm font-semibold text-gray-950 dark:text-white;
+    }
+
+    /* ---------- Stats ---------- */
+
+    .ui-stat {
+        @apply px-5 py-4 min-w-0;
+    }
+
+    .ui-stat-label {
+        @apply text-xs font-medium text-gray-500 dark:text-gray-400;
+    }
+
+    .ui-stat-value {
+        @apply mt-1.5 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white tabular-nums truncate;
+    }
+
+    /* ---------- Form controls ---------- */
+
     .ui-control,
     .ui-control-disabled {
-        @apply w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-800 text-sm;
+        @apply w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-800 dark:bg-gray-950 text-sm;
     }
 
     .ui-control {
-        @apply bg-white text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors;
+        @apply bg-white text-gray-950 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-600 hover:border-gray-300 dark:hover:border-gray-700 focus:border-blue-500 focus:ring-3 focus:ring-blue-500/15 dark:focus:border-blue-500 dark:focus:ring-blue-500/20 outline-none transition;
     }
 
     .ui-control-disabled {
-        @apply bg-gray-100 text-gray-500 dark:text-gray-400 cursor-not-allowed;
+        @apply bg-gray-50 dark:bg-gray-925 text-gray-500 dark:text-gray-500 cursor-not-allowed;
     }
 
     select.ui-control,
@@ -53,103 +159,222 @@ html.dark {
         @apply pr-10;
     }
 
+    /* File picker: a quiet outlined button followed by the chosen file name */
+    .ui-file {
+        @apply block w-full text-sm text-gray-500 dark:text-gray-400 cursor-pointer rounded-lg border border-dashed border-gray-300 dark:border-gray-700 p-1.5 hover:border-gray-400 dark:hover:border-gray-600 transition-colors file:mr-3 file:cursor-pointer file:rounded-md file:border file:border-solid file:border-gray-200 dark:file:border-gray-800 file:bg-white dark:file:bg-gray-900 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-gray-900 dark:file:text-gray-100 hover:file:bg-gray-50 dark:hover:file:bg-gray-800 file:transition-colors;
+    }
+
     .ui-label {
-        @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1;
+        @apply block text-sm font-medium text-gray-800 dark:text-gray-200 mb-1.5;
     }
 
     .ui-checkbox {
-        @apply rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500;
+        @apply rounded border-gray-300 dark:border-gray-700 dark:bg-gray-950 text-blue-600 focus:ring-blue-500/30 focus:ring-offset-0 transition;
     }
 
+    /* Toggle switch built on a native checkbox */
+    .ui-switch {
+        @apply appearance-none shrink-0 w-8 h-4.5 rounded-full bg-gray-200 dark:bg-gray-800 cursor-pointer transition-all duration-200 border-0 focus:ring-2 focus:ring-blue-500/30 focus:ring-offset-0 align-middle;
+        background-image: radial-gradient(circle, #fff 0.4rem, transparent calc(0.4rem + 0.5px));
+        background-size: 1.125rem 1.125rem;
+        background-position: left center;
+        background-repeat: no-repeat;
+    }
+
+    .ui-switch:checked,
+    .ui-switch:checked:hover,
+    .ui-switch:checked:focus {
+        @apply bg-blue-600;
+        background-image: radial-gradient(circle, #fff 0.4rem, transparent calc(0.4rem + 0.5px));
+        background-size: 1.125rem 1.125rem;
+        background-position: right center;
+    }
+
+    /* ---------- Buttons ---------- */
+
     .ui-btn {
-        @apply font-medium py-2 px-4 rounded-lg text-sm transition-colors;
+        @apply inline-flex items-center justify-center gap-1.5 font-medium py-2 px-3.5 rounded-lg text-sm whitespace-nowrap select-none border border-transparent transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
     }
 
     .ui-btn-sm {
-        @apply py-1.5 px-3 text-xs;
+        @apply py-1 px-2.5 text-xs rounded-md;
     }
 
-    .ui-btn-primary {
-        @apply bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-500/15 dark:text-blue-400 dark:hover:bg-blue-500/25;
-    }
-
-    .ui-btn-primary-solid {
-        @apply bg-blue-600 hover:bg-blue-700 text-white;
-    }
-
-    .ui-btn-secondary {
-        @apply bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200;
-    }
-
+    /* Solid, high-contrast: the one primary action on a page */
+    .ui-btn-primary,
+    .ui-btn-primary-solid,
     .ui-btn-success {
-        @apply bg-green-600 hover:bg-green-700 text-white dark:bg-green-500/15 dark:text-green-400 dark:hover:bg-green-500/25;
+        @apply bg-gray-950 hover:bg-gray-800 text-white dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200;
+    }
+
+    /* Outlined, quiet: everything else */
+    .ui-btn-secondary,
+    .ui-btn-warning,
+    .ui-btn-purple {
+        @apply bg-white hover:bg-gray-50 text-gray-900 border-gray-200 dark:bg-gray-950 dark:hover:bg-gray-900 dark:text-gray-100 dark:border-gray-800;
     }
 
     .ui-btn-danger {
-        @apply bg-red-600 hover:bg-red-700 text-white dark:bg-red-500/15 dark:text-red-400 dark:hover:bg-red-500/25;
+        @apply bg-red-600 hover:bg-red-700 text-white dark:bg-red-600 dark:hover:bg-red-500;
     }
 
-    .ui-btn-warning {
-        @apply bg-yellow-500 hover:bg-yellow-600 text-white dark:bg-yellow-500/15 dark:text-yellow-400 dark:hover:bg-yellow-500/25;
+    .ui-btn-ghost {
+        @apply text-gray-600 hover:text-gray-950 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-white dark:hover:bg-gray-900;
     }
 
-    .ui-btn-purple {
-        @apply bg-purple-600 hover:bg-purple-700 text-white dark:bg-purple-500/15 dark:text-purple-400 dark:hover:bg-purple-500/25;
+    .ui-btn-icon {
+        @apply p-1.5 rounded-md;
     }
 
-    .ui-card {
-        @apply bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800;
+    /* Small buttons live in toolbars and table rows: keep them all quiet */
+    .ui-btn-sm.ui-btn-primary,
+    .ui-btn-sm.ui-btn-success,
+    .ui-btn-sm.ui-btn-warning,
+    .ui-btn-sm.ui-btn-purple {
+        @apply bg-white hover:bg-gray-50 text-gray-900 border-gray-200 dark:bg-gray-950 dark:hover:bg-gray-900 dark:text-gray-100 dark:border-gray-800;
     }
 
-    .ui-card-header {
-        @apply px-5 py-4 border-b border-gray-200 dark:border-gray-800;
+    .ui-btn-sm.ui-btn-danger {
+        @apply bg-white text-red-600 border-gray-200 hover:bg-red-50 hover:border-red-200 dark:bg-gray-950 dark:text-red-400 dark:border-gray-800 dark:hover:bg-red-500/10 dark:hover:border-red-500/30;
     }
+
+    /* ---------- Feedback ---------- */
 
     .ui-alert {
         @apply rounded-lg border text-sm;
     }
 
     .ui-alert-success {
-        @apply bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300;
+        @apply bg-emerald-50 dark:bg-emerald-500/5 border-emerald-200 dark:border-emerald-500/20 text-emerald-800 dark:text-emerald-400;
     }
 
     .ui-alert-danger {
-        @apply bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300;
+        @apply bg-red-50 dark:bg-red-500/5 border-red-200 dark:border-red-500/20 text-red-800 dark:text-red-400;
     }
 
     .ui-alert-warning {
-        @apply bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-400/80;
+        @apply bg-amber-50 dark:bg-amber-500/5 border-amber-200 dark:border-amber-500/20 text-amber-800 dark:text-amber-400;
     }
 
     .ui-alert-info {
-        @apply bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300;
+        @apply bg-blue-50 dark:bg-blue-500/5 border-blue-200 dark:border-blue-500/20 text-blue-800 dark:text-blue-400;
     }
 
+    /* ---------- Tables ---------- */
+
     .ui-table-head {
-        @apply bg-gray-50 dark:bg-gray-800/50 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider;
+        @apply text-left text-xs font-medium text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-800;
     }
 
     .ui-table-body {
-        @apply divide-y divide-gray-200 dark:divide-gray-800;
+        @apply divide-y divide-gray-100 dark:divide-gray-900 [&>tr]:transition-colors;
     }
 
+    /* ---------- Badges ---------- */
+
     .ui-badge {
-        @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border border-transparent;
+        @apply inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-xs font-medium border border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300;
     }
 
     .ui-badge-primary {
-        @apply bg-blue-100 dark:bg-blue-500/20 text-blue-800 dark:text-blue-200 dark:border-blue-500/30;
+        @apply border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300;
+    }
+
+    .ui-badge-success {
+        @apply border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300;
+    }
+
+    .ui-badge-warning {
+        @apply border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300;
+    }
+
+    .ui-kbd {
+        @apply inline-flex items-center justify-center min-w-5 h-5 px-1 rounded border border-gray-200 bg-gray-50 font-sans text-[11px] font-medium text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400;
+    }
+
+    /* ---------- Modpack rail ---------- */
+
+    .rail-item {
+        @apply relative flex items-center justify-center size-10 rounded-xl bg-white dark:bg-gray-925 border border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400 transition-all duration-150 hover:rounded-lg hover:border-gray-300 dark:hover:border-gray-700 hover:text-gray-950 dark:hover:text-white;
+    }
+
+    .rail-item[aria-current="page"] {
+        @apply rounded-lg border-gray-950 dark:border-white;
+    }
+
+    .rail-indicator {
+        @apply absolute -left-3.5 top-1/2 -translate-y-1/2 w-1 h-0 rounded-r-full bg-gray-950 dark:bg-white transition-all duration-150;
+    }
+
+    .rail-item:hover .rail-indicator {
+        @apply h-4;
+    }
+
+    .rail-item[aria-current="page"] .rail-indicator {
+        @apply h-7;
+    }
+
+    /* ---------- Top navigation ---------- */
+
+    .nav-tab {
+        @apply relative px-3 py-1.5 rounded-md text-sm text-gray-500 dark:text-gray-400 hover:text-gray-950 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-900 transition-colors whitespace-nowrap;
+    }
+
+    .nav-tab[aria-current="page"] {
+        @apply text-gray-950 dark:text-white;
+    }
+
+    .nav-tab[aria-current="page"]::after {
+        content: '';
+        /* Sits on the header's bottom edge: (56px bar - 32px tab) / 2 */
+        @apply absolute left-3 right-3 -bottom-3 h-0.5 rounded-full bg-gray-950 dark:bg-white;
+    }
+
+    /* Only the sub-nav matching html[data-section] is shown */
+    .subnav {
+        @apply hidden items-center gap-1 -mx-1 mb-6 overflow-x-auto;
+        scrollbar-width: none;
+    }
+
+    html[data-section="modpacks"] .subnav[data-subnav="modpacks"],
+    html[data-section="mods"] .subnav[data-subnav="mods"],
+    html[data-section="settings"] .subnav[data-subnav="settings"] {
+        @apply flex;
+    }
+
+    .subnav-link {
+        @apply px-3 py-1.5 rounded-full text-sm text-gray-500 dark:text-gray-400 border border-transparent hover:text-gray-950 dark:hover:text-white transition-colors whitespace-nowrap;
+    }
+
+    .subnav-link[aria-current="page"] {
+        @apply bg-white text-gray-950 border-gray-200 dark:bg-gray-900 dark:text-white dark:border-gray-800;
+    }
+
+    /* ---------- Menus & overlays ---------- */
+
+    .ui-menu {
+        @apply bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl shadow-float p-1;
+    }
+
+    .ui-menu-item {
+        @apply flex items-center gap-2.5 w-full px-2.5 py-1.5 rounded-md text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 hover:text-gray-950 dark:hover:bg-gray-900 dark:hover:text-white text-left transition-colors;
+    }
+
+    /* ---------- Pagination ---------- */
+
+    .ui-page-btn {
+        @apply min-w-8 h-8 px-2.5 inline-flex items-center justify-center rounded-md text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-100 hover:text-gray-950 dark:hover:bg-gray-900 dark:hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent;
+    }
+
+    .ui-page-btn-active {
+        @apply bg-white text-gray-950 border border-gray-200 hover:bg-white dark:bg-gray-900 dark:text-white dark:border-gray-800 dark:hover:bg-gray-900;
     }
 }
 
-/* Scrollbar styling for sidebar */
-.sidebar-scroll::-webkit-scrollbar {
-    width: 4px;
+/* Hide scrollbars on the rail while keeping it scrollable */
+.no-scrollbar {
+    scrollbar-width: none;
 }
-.sidebar-scroll::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 2px;
-}
-.sidebar-scroll::-webkit-scrollbar-track {
-    background: transparent;
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
 }

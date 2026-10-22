@@ -1,11 +1,14 @@
 FROM node:24.20.0-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS assets
 
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+RUN corepack enable
+
 WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm install
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
 COPY vite.config.js ./
 COPY resources/ resources/
-RUN npm run build
+RUN pnpm run build
 
 FROM php:8.5-fpm@sha256:843e1eff4294a4f44e3f3817efceae4946d395879bdf00387111b824a5daff1a
 
@@ -17,7 +20,8 @@ RUN apt-get update && apt-get install -y \
     && pecl install redis \
     && docker-php-ext-enable redis \
     && rm -rf /var/lib/apt/lists/* \
-    && echo 'memory_limit = 256M' > /usr/local/etc/php/conf.d/memory.ini
+    && echo 'memory_limit = 256M' > /usr/local/etc/php/conf.d/memory.ini \
+    && printf 'upload_max_filesize = 512M\npost_max_size = 512M\n' > /usr/local/etc/php/conf.d/uploads.ini
 
 COPY --from=composer:2.10.3@sha256:a5f59b9fd2faf31218632be4809dc6491761085e8064c31dc3b84378c48c248b /usr/bin/composer /usr/bin/composer
 

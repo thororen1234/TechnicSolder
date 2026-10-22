@@ -11,8 +11,8 @@ Put Solder into maintenance mode, pull the latest code, update dependencies, run
 php artisan down
 git pull
 composer install --no-dev --no-interaction
-npm ci
-npm run build
+pnpm install --frozen-lockfile
+pnpm run build
 php artisan migrate
 php artisan optimize
 php artisan up

@@ -4,6 +4,28 @@ All notable changes to Technic Solder will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Export builds as a client zip, a server zip (with the Forge/NeoForge installer and setup notes), a Modrinth `.mrpack` or a CurseForge zip from the build page's Export menu. Modrinth exports link mods hosted on Modrinth by hash instead of bundling them.
+- Back up a modpack with all of its builds as a Solder JSON file and restore it from Import modpack.
+- Modpack imports now add the pack's mod loader to the build, keep its bundled configs and other override files as a `<modpack>-overrides` mod, place resource and shader packs in the right folders and skip server-only files.
+
+### Fixed
+
+- Batch mod import no longer fails when no Minecraft version is given.
+- Forge builds for Minecraft 1.12.2 and older now use the universal jar Technic requires instead of the installer.
+- NeoForge versions map to the right Minecraft version, including year-based releases such as 26.1.
+- Unstable Fabric and Quilt loader builds are treated as betas instead of releases.
+- CurseForge imports find older files instead of only the newest few, report mods whose authors disabled third-party downloads, and read the API key from config so it works with a cached config. CurseForge packs import on case-sensitive file systems.
+- Failed or corrupt downloads, checksum mismatches and remote mod repositories are reported instead of creating broken mod versions, and mods without readable metadata fall back to the provider's version name.
+- Modrinth mods published under the same version number for several loaders no longer overwrite each other, and the loader filter now applies when picking a version.
+- Mod import now requires permission to create mods.
+
+### Changed
+
+- Switched the frontend package manager from npm to **pnpm**. Use `pnpm install --frozen-lockfile && pnpm run build` in place of `npm ci && npm run build`; the Docker image enables pnpm through Corepack. The npm dependency cooldown and lifecycle-script blocking now live in `pnpm-workspace.yaml`.
+- Redesigned the panel with a minimal monochrome look. A modpack rail replaces the sidebar for one-click switching between modpacks, section tabs and sub-navigation replace the collapsible menus, and a ⌘K / Ctrl+K command palette jumps to any modpack or page and searches mods. The overview, modpack list (now a card grid), modpack page, and mod list were rebuilt; every other page picks up the new styles. Rebuild and deploy frontend assets together with the updated templates.
+
 ## [1.5.0] - 2026-09-20
 
 ### Added

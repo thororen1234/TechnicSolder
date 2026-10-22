@@ -81,4 +81,12 @@ return [
     'initial_admin_email' => env('SOLDER_INITIAL_ADMIN_EMAIL', 'admin@example.com'),
     'initial_admin_password' => env('SOLDER_INITIAL_ADMIN_PASSWORD'),
 
+    /**
+     * CurseForge API Key
+     *
+     * Required to search and import mods and modpacks from CurseForge.
+     * Request a key at https://console.curseforge.com/
+     */
+    'curseforge_api_key' => env('CURSEFORGE_API_KEY'),
+
 ];

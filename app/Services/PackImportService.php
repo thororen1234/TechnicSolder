@@ -6,465 +6,519 @@ use App\Models\Build;
 use App\Models\Mod;
 use App\Models\Modpack;
 use App\Models\Modversion;
+use App\Mods\ImportedModData;
+use App\Mods\ModProvider;
 use App\Mods\Providers\CurseForge;
+use App\Mods\Providers\Fabric;
+use App\Mods\Providers\Forge;
 use App\Mods\Providers\Modrinth;
+use App\Mods\Providers\NeoForge;
+use App\Mods\Providers\Quilt;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use ZipArchive;
 
+/**
+ * Imports a modpack from a CurseForge zip, a Modrinth .mrpack, or a Solder JSON backup.
+ *
+ * Mods are added to the mod library, the pack's mod loader and override files (configs, scripts...)
+ * are stored as mods of their own, and everything is linked to a new build of a new, hidden modpack.
+ */
 class PackImportService
 {
+    /** @var list<string> */
     private array $errors = [];
+
     private int $imported = 0;
+
     private int $skipped = 0;
 
+    /**
+     * @return array{error: string}|array{modpack_id: int, build_id: int, imported: int, skipped: int, errors: list<string>}
+     */
     public function importFromFile(UploadedFile $file, string $name, string $slug): array
     {
-        return $this->processZip($file->getRealPath(), $name, $slug);
+        return $this->process($file->getRealPath(), $name, $slug);
     }
 
+    /**
+     * @return array{error: string}|array{modpack_id: int, build_id: int, imported: int, skipped: int, errors: list<string>}
+     */
     public function importFromUrl(string $url, string $name, string $slug): array
     {
         $tmpPath = tempnam(sys_get_temp_dir(), 'solder_pack_');
 
-        $fp = fopen($tmpPath, 'wb');
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [
-            CURLOPT_FILE          => $fp,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_USERAGENT     => 'TechnicPack/TechnicSolder/' . SOLDER_VERSION,
-            CURLOPT_TIMEOUT       => 120,
-        ]);
-        curl_exec($ch);
-        $curlError = curl_error($ch);
-        curl_close($ch);
-        fclose($fp);
+        try {
+            $error = ModProvider::download($url, $tmpPath);
+            if ($error !== null) {
+                return ['error' => "Could not download the archive: $error"];
+            }
 
-        if ($curlError) {
-            unlink($tmpPath);
-            return ['error' => "Failed to download archive: $curlError"];
+            return $this->process($tmpPath, $name, $slug);
+        } finally {
+            if (file_exists($tmpPath)) {
+                unlink($tmpPath);
+            }
         }
-
-        $result = $this->processZip($tmpPath, $name, $slug);
-        unlink($tmpPath);
-
-        return $result;
     }
 
-    private function processZip(string $zipPath, string $name, string $slug): array
+    private function process(string $path, string $name, string $slug): array
     {
         $this->errors = [];
         $this->imported = 0;
         $this->skipped = 0;
 
-        $zip = new ZipArchive();
-        if ($zip->open($zipPath) !== true) {
-            return ['error' => 'Could not open archive — make sure it is a valid ZIP or mrpack file.'];
+        $backup = $this->readSolderBackup($path);
+        if ($backup !== null) {
+            return $this->importSolderBackup($backup, $name, $slug);
         }
 
-        if ($zip->locateName('manifest.json') !== false) {
-            return $this->importCurseForge($zip, $name, $slug);
+        $zip = new ZipArchive;
+        if ($zip->open($path, ZipArchive::RDONLY) !== true) {
+            return ['error' => 'Could not open the archive. Upload a CurseForge .zip, a Modrinth .mrpack or a Solder .json backup.'];
         }
 
-        if ($zip->locateName('modrinth.index.json') !== false) {
-            return $this->importModrinth($zip, $name, $slug);
-        }
+        try {
+            if ($zip->locateName('modrinth.index.json') !== false) {
+                return $this->importModrinth($zip, $name, $slug);
+            }
 
-        $zip->close();
-        return ['error' => 'Unrecognized modpack format. Expected a CurseForge (.zip) or Modrinth (.mrpack) modpack.'];
+            if ($zip->locateName('manifest.json') !== false) {
+                return $this->importCurseForge($zip, $name, $slug);
+            }
+
+            return ['error' => 'Unrecognized modpack format. Expected a CurseForge .zip (manifest.json) or a Modrinth .mrpack (modrinth.index.json).'];
+        } finally {
+            $zip->close();
+        }
     }
 
     private function importCurseForge(ZipArchive $zip, string $name, string $slug): array
     {
-        $manifest = json_decode($zip->getFromName('manifest.json'));
-        $zip->close();
+        $manifest = json_decode((string) $zip->getFromName('manifest.json'));
 
-        if (! $manifest) {
-            return ['error' => 'Could not parse manifest.json.'];
+        if (! is_object($manifest) || ($manifest->manifestType ?? 'minecraftModpack') !== 'minecraftModpack') {
+            return ['error' => 'manifest.json is not a valid CurseForge modpack manifest.'];
         }
 
-        $packName    = $name ?: ($manifest->name ?? 'Imported Pack');
-        $packVersion = $manifest->version ?? '1.0';
-        $mcVersion   = $manifest->minecraft->version ?? '';
-        $loaderStr   = '';
+        $files = array_values(array_filter(
+            $manifest->files ?? [],
+            fn ($file) => ! empty($file->fileID) && ($file->required ?? true) !== false
+        ));
 
-        foreach ($manifest->minecraft->modLoaders ?? [] as $loader) {
-            if ($loader->primary ?? false) {
-                $loaderStr = $loader->id;
-                break;
-            }
+        if (! empty($files) && ! CurseForge::hasApiKey()) {
+            return ['error' => 'Importing CurseForge modpacks requires a CurseForge API key. Set CURSEFORGE_API_KEY in your .env file.'];
         }
 
-        $modpack = $this->createModpack($slug, $packName);
-        $build   = $this->createBuild($modpack, $packVersion, $mcVersion, $loaderStr);
+        $minecraft = (string) ($manifest->minecraft->version ?? '');
+        $loaders = $manifest->minecraft->modLoaders ?? [];
+        $primaryLoader = collect($loaders)->firstWhere('primary', true) ?? ($loaders[0] ?? null);
+        [$loaderType, $loaderVersion] = $this->parseCurseForgeLoader((string) ($primaryLoader->id ?? ''));
+
+        $modpack = $this->createModpack($slug, $name ?: ($manifest->name ?? 'Imported Pack'));
+        $build = $this->createBuild($modpack, (string) ($manifest->version ?? '1.0'), $minecraft, $primaryLoader->id ?? '');
 
         $modversionIds = [];
 
-        foreach ($manifest->files ?? [] as $file) {
-            if (isset($file->required) && ! $file->required) {
-                continue;
-            }
-
+        $mods = CurseForge::modsForFiles(array_map(fn ($file) => $file->fileID, $files));
+        foreach ($files as $file) {
             $projectId = (string) ($file->projectID ?? '');
-            $fileId    = (string) ($file->fileID ?? '');
+            $fileId = (string) $file->fileID;
+            $modData = $mods[$projectId] ?? null;
 
-            if (! $projectId || ! $fileId) {
+            if ($modData === null || ! isset($modData->versions[$fileId])) {
+                $this->fail("CurseForge file $fileId (project $projectId) could not be found");
+
                 continue;
             }
 
-            $mvId = $this->installFromCurseForge($projectId, $fileId);
-            if ($mvId !== null) {
-                $modversionIds[] = $mvId;
-                $this->imported++;
-            }
+            $this->installVersion(CurseForge::class, $projectId, $fileId, $modData, $modversionIds);
         }
 
-        $build->modversions()->sync($modversionIds);
+        $this->installLoader($loaderType, $loaderVersion, $minecraft, $modversionIds);
+        $this->installOverrides($zip, [($manifest->overrides ?? 'overrides') ?: 'overrides'], $modpack, $build->version, $modversionIds);
 
-        return $this->buildResult($modpack, $build);
+        $build->modversions()->sync(array_unique($modversionIds));
+
+        return $this->result($modpack, $build);
     }
 
     private function importModrinth(ZipArchive $zip, string $name, string $slug): array
     {
-        $index = json_decode($zip->getFromName('modrinth.index.json'));
-        $zip->close();
+        $index = json_decode((string) $zip->getFromName('modrinth.index.json'));
 
-        if (! $index) {
-            return ['error' => 'Could not parse modrinth.index.json.'];
+        if (! is_object($index) || ($index->game ?? 'minecraft') !== 'minecraft') {
+            return ['error' => 'modrinth.index.json is not a valid Minecraft modpack index.'];
         }
 
-        $packName    = $name ?: ($index->name ?? 'Imported Pack');
-        $packVersion = $index->versionId ?? '1.0';
-        $deps        = (array) ($index->dependencies ?? []);
-        $mcVersion   = $deps['minecraft'] ?? '';
+        $dependencies = (array) ($index->dependencies ?? []);
+        $minecraft = (string) ($dependencies['minecraft'] ?? '');
 
-        $loaderStr = '';
-        foreach (['fabric-loader', 'quilt-loader', 'forge', 'neoforge'] as $loaderKey) {
-            if (! empty($deps[$loaderKey])) {
-                $loaderStr = $loaderKey . '-' . $deps[$loaderKey];
+        $loaderType = '';
+        $loaderVersion = '';
+        foreach (['neoforge' => 'neoforge', 'forge' => 'forge', 'fabric-loader' => 'fabric', 'quilt-loader' => 'quilt'] as $key => $type) {
+            if (! empty($dependencies[$key])) {
+                [$loaderType, $loaderVersion] = [$type, (string) $dependencies[$key]];
                 break;
             }
         }
 
-        $modpack = $this->createModpack($slug, $packName);
-        $build   = $this->createBuild($modpack, $packVersion, $mcVersion, $loaderStr);
+        $modpack = $this->createModpack($slug, $name ?: ($index->name ?? 'Imported Pack'));
+        $build = $this->createBuild($modpack, (string) ($index->versionId ?? '1.0'), $minecraft, $loaderType ? "$loaderType-$loaderVersion" : '');
 
         $modversionIds = [];
 
-        foreach ($index->files ?? [] as $file) {
-            $downloads = (array) ($file->downloads ?? []);
-            if (empty($downloads)) {
+        // Skip files the client doesn't use (server-only mods)
+        $files = array_values(array_filter(
+            $index->files ?? [],
+            fn ($file) => ($file->env->client ?? 'required') !== 'unsupported' && ! empty($file->downloads)
+        ));
+
+        $modrinthFiles = [];
+        $otherFiles = [];
+        foreach ($files as $file) {
+            if (preg_match('#^https://cdn\.modrinth\.com/data/([^/]+)/versions/([^/]+)/#', $file->downloads[0], $match)) {
+                $modrinthFiles[] = [$file, $match[1], $match[2]];
+            } else {
+                $otherFiles[] = $file;
+            }
+        }
+
+        $mods = Modrinth::modsForVersions(array_map(fn ($entry) => $entry[2], $modrinthFiles));
+        foreach ($modrinthFiles as [$file, $projectId, $versionId]) {
+            $modData = $mods[$projectId] ?? null;
+
+            if ($modData === null || ! isset($modData->versions[$versionId])) {
+                // Not resolvable through the API (deleted project?): fall back to the direct download
+                $otherFiles[] = $file;
+
                 continue;
             }
 
-            $downloadUrl = $downloads[0];
+            $modData->versions[$versionId]->folder = $this->folderFromPath($file->path ?? '');
+            $modData->versions[$versionId]->filename = basename($file->path ?? $modData->versions[$versionId]->filename);
+            $this->installVersion(Modrinth::class, $projectId, $versionId, $modData, $modversionIds);
+        }
 
-            if (! preg_match('#/data/([^/]+)/versions/([^/]+)/#', $downloadUrl, $m)) {
-                $mvId = $this->installFromDirectUrl($downloadUrl, $file->path ?? basename($downloadUrl));
-                if ($mvId !== null) {
-                    $modversionIds[] = $mvId;
-                    $this->imported++;
+        foreach ($otherFiles as $file) {
+            $this->installDirectFile($file, $minecraft, $modversionIds);
+        }
+
+        $this->installLoader($loaderType, $loaderVersion, $minecraft, $modversionIds);
+        $this->installOverrides($zip, ['overrides', 'client-overrides'], $modpack, $build->version, $modversionIds);
+
+        $build->modversions()->sync(array_unique($modversionIds));
+
+        return $this->result($modpack, $build);
+    }
+
+    /**
+     * Install a file listed in a .mrpack that isn't hosted on Modrinth, using its download URL directly.
+     *
+     * @param  list<int>  $modversionIds
+     */
+    private function installDirectFile(object $file, string $minecraft, array &$modversionIds): void
+    {
+        $path = (string) ($file->path ?? basename($file->downloads[0]));
+        $filename = basename($path);
+        $slug = $this->slugFromFilename($filename);
+
+        $modData = new ImportedModData;
+        $modData->id = $slug;
+        $modData->slug = $slug;
+        $modData->name = Str::headline($slug);
+        $modData->versions[$filename] = (object) [
+            'url' => $file->downloads[0],
+            'filename' => $filename,
+            'label' => pathinfo($filename, PATHINFO_FILENAME),
+            'gameVersions' => $minecraft !== '' ? [$minecraft] : [],
+            'folder' => $this->folderFromPath($path),
+            'sha1' => $file->hashes->sha1 ?? null,
+        ];
+
+        $this->installVersion(Modrinth::class, $slug, $filename, $modData, $modversionIds);
+    }
+
+    /**
+     * @param  class-string<ModProvider>  $provider
+     * @param  list<int>  $modversionIds
+     */
+    private function installVersion(string $provider, string $modId, string $versionKey, ImportedModData $modData, array &$modversionIds): void
+    {
+        $result = $provider::install($modId, [$versionKey], $modData);
+
+        if (isset($result->modversionIds[$versionKey])) {
+            $modversionIds[] = $result->modversionIds[$versionKey];
+            $this->imported++;
+        } else {
+            $this->fail(...($result->errors ?: ["{$modData->name}: import failed"]));
+        }
+    }
+
+    /**
+     * Add the pack's mod loader (bin/modpack.jar or bin/version.json) to the build.
+     *
+     * @param  list<int>  $modversionIds
+     */
+    private function installLoader(string $type, string $version, string $minecraft, array &$modversionIds): void
+    {
+        if ($type === '' || $version === '' || $minecraft === '') {
+            return;
+        }
+
+        /** @var class-string<ModProvider>|null $provider */
+        $provider = [
+            'forge' => Forge::class,
+            'neoforge' => NeoForge::class,
+            'fabric' => Fabric::class,
+            'quilt' => Quilt::class,
+        ][$type] ?? null;
+
+        $loaderData = $provider ? $provider::mod($minecraft) : null;
+
+        $candidates = match ($type) {
+            'forge' => ["$minecraft-forge-$version", "$minecraft-forge-$version-$minecraft"],
+            'neoforge' => ["neoforge-$version", "forge-$minecraft-$version"],
+            default => ["$minecraft-$version"],
+        };
+
+        $key = collect($candidates)->first(fn ($candidate) => isset($loaderData->versions[$candidate]));
+
+        if ($key === null) {
+            $this->fail("Could not find $type $version for Minecraft $minecraft. Add the mod loader to the build manually.");
+
+            return;
+        }
+
+        $this->installVersion($provider, $minecraft, $key, $loaderData, $modversionIds);
+    }
+
+    /**
+     * Store the pack's override files (configs, scripts, resource packs...) as a mod linked to the build.
+     *
+     * @param  list<string>  $prefixes  Folders inside the archive whose contents are extracted to the game folder
+     * @param  list<int>  $modversionIds
+     */
+    private function installOverrides(ZipArchive $source, array $prefixes, Modpack $modpack, string $version, array &$modversionIds): void
+    {
+        $entries = [];
+        for ($i = 0; $i < $source->numFiles; $i++) {
+            $entryName = (string) $source->getNameIndex($i);
+
+            foreach ($prefixes as $prefix) {
+                $prefix = trim($prefix, '/').'/';
+                if (str_starts_with($entryName, $prefix) && ! str_ends_with($entryName, '/')) {
+                    $relative = substr($entryName, strlen($prefix));
+                    // Guard against path traversal in untrusted archives
+                    if ($relative !== '' && ! str_contains($relative, '..')) {
+                        $entries[$relative] = $i;
+                    }
                 }
+            }
+        }
+
+        if (empty($entries)) {
+            return;
+        }
+
+        $repo = config('solder.repo_location');
+        if (filter_var($repo, FILTER_VALIDATE_URL)) {
+            $this->fail('The mod repository is a remote URL, so the pack\'s override files could not be saved.');
+
+            return;
+        }
+
+        $modSlug = Str::slug("{$modpack->slug}-overrides");
+        $mod = Mod::firstOrCreate(['name' => $modSlug], [
+            'pretty_name' => "{$modpack->name} Overrides",
+            'description' => "Configs and other files bundled with the {$modpack->name} modpack.",
+        ]);
+        Cache::forget('mods');
+
+        $versionName = trim(preg_replace('/[^A-Za-z0-9._+-]+/', '-', $version), '-') ?: '1.0';
+        $finalPath = $repo."mods/$modSlug/$modSlug-$versionName.zip";
+
+        if (! is_dir(dirname($finalPath))) {
+            mkdir(dirname($finalPath), 0775, true);
+        }
+
+        $out = new ZipArchive;
+        if ($out->open($finalPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+            $this->fail("Could not write $finalPath");
+
+            return;
+        }
+        foreach ($entries as $relative => $index) {
+            $out->addFromString($relative, (string) $source->getFromIndex($index));
+        }
+        $out->close();
+
+        $modversion = Modversion::updateOrCreate(
+            ['mod_id' => $mod->id, 'version' => $versionName],
+            ['filesize' => filesize($finalPath), 'md5' => md5_file($finalPath)],
+        );
+
+        $modversionIds[] = $modversion->id;
+    }
+
+    /**
+     * Decode a Solder JSON backup, or return null when the file isn't one.
+     */
+    private function readSolderBackup(string $path): ?array
+    {
+        $handle = fopen($path, 'rb');
+        $start = $handle ? ltrim((string) fread($handle, 64)) : '';
+        if ($handle) {
+            fclose($handle);
+        }
+
+        if (! str_starts_with($start, '{')) {
+            return null;
+        }
+
+        $data = json_decode((string) file_get_contents($path), true);
+
+        return is_array($data) && ($data['format'] ?? null) === PackExportService::BACKUP_FORMAT ? $data : null;
+    }
+
+    /**
+     * Recreate a modpack from a Solder JSON backup. Mod files are expected to already be in the mod repository.
+     */
+    private function importSolderBackup(array $backup, string $name, string $slug): array
+    {
+        $source = $backup['modpack'] ?? [];
+        $modpack = $this->createModpack($slug, $name ?: ($source['name'] ?? 'Imported Pack'));
+        $modpack->fill(array_intersect_key($source, array_flip(['recommended', 'latest', 'private'])));
+        $modpack->save();
+
+        $modversionsByKey = [];
+        foreach ($backup['mods'] ?? [] as $modData) {
+            if (empty($modData['name'])) {
                 continue;
             }
 
-            $projectId = $m[1];
-            $versionId = $m[2];
+            $mod = Mod::firstOrCreate(['name' => $modData['name']], array_intersect_key(
+                $modData + ['pretty_name' => $modData['name']],
+                array_flip(['pretty_name', 'author', 'description', 'link'])
+            ));
 
-            $mvId = $this->installFromModrinth($projectId, $versionId);
-            if ($mvId !== null) {
-                $modversionIds[] = $mvId;
+            foreach ($modData['versions'] ?? [] as $versionData) {
+                $modversion = Modversion::firstOrCreate(
+                    ['mod_id' => $mod->id, 'version' => $versionData['version']],
+                    ['md5' => $versionData['md5'] ?? '', 'filesize' => $versionData['filesize'] ?? 0],
+                );
+                $modversionsByKey[$mod->name."\0".$modversion->version] = $modversion->id;
                 $this->imported++;
             }
         }
+        Cache::forget('mods');
 
-        $build->modversions()->sync($modversionIds);
+        $lastBuild = null;
+        foreach ($backup['builds'] ?? [] as $buildData) {
+            $build = new Build(array_intersect_key($buildData, array_flip([
+                'version', 'minecraft', 'forge', 'is_published', 'private', 'min_java', 'java_runtime', 'min_memory',
+            ])));
+            $build->modpack_id = $modpack->id;
+            $build->save();
 
-        return $this->buildResult($modpack, $build);
-    }
+            $ids = [];
+            foreach ($buildData['mods'] ?? [] as $entry) {
+                $id = $modversionsByKey[($entry['name'] ?? '')."\0".($entry['version'] ?? '')] ?? null;
+                if ($id === null) {
+                    $this->fail("Build {$build->version}: {$entry['name']} {$entry['version']} is missing from the backup");
 
-    private function installFromCurseForge(string $projectId, string $fileId): ?int
-    {
-        try {
-            $maxBefore = Modversion::max('id') ?? 0;
-            $result    = CurseForge::install($projectId, [$fileId]);
-
-            return $this->resolveModversionId($result, $maxBefore);
-        } catch (\Throwable $e) {
-            $this->errors[] = "CurseForge project $projectId: " . $e->getMessage();
-            $this->skipped++;
-            return null;
-        }
-    }
-
-    private function installFromModrinth(string $projectId, string $versionId): ?int
-    {
-        try {
-            $modData = Modrinth::mod($projectId);
-
-            if (! $modData) {
-                $this->errors[] = "Modrinth project not found: $projectId";
-                $this->skipped++;
-                return null;
-            }
-
-            $versionKey = null;
-            foreach ($modData->versions as $key => $v) {
-                if (str_contains($v->url ?? '', "/$versionId/")) {
-                    $versionKey = $key;
-                    break;
+                    continue;
                 }
+                $ids[] = $id;
             }
-
-            if ($versionKey === null) {
-                $this->errors[] = "Version $versionId not found for Modrinth project $projectId";
-                $this->skipped++;
-                return null;
-            }
-
-            $maxBefore = Modversion::max('id') ?? 0;
-            $result    = Modrinth::install($projectId, [$versionKey]);
-
-            return $this->resolveModversionId($result, $maxBefore);
-        } catch (\Throwable $e) {
-            $this->errors[] = "Modrinth project $projectId: " . $e->getMessage();
-            $this->skipped++;
-            return null;
+            $build->modversions()->sync($ids);
+            $lastBuild = $build;
         }
+
+        if ($lastBuild === null) {
+            return ['error' => 'The backup contains no builds.'];
+        }
+
+        return $this->result($modpack, $lastBuild);
     }
 
-    private function resolveModversionId(object $result, int $maxBefore): ?int
+    /**
+     * Split a CurseForge loader id such as "forge-47.2.0" or "fabric-0.15.11" into [type, version].
+     *
+     * @return array{0: string, 1: string}
+     */
+    private function parseCurseForgeLoader(string $id): array
     {
-        if ($result->id <= 0) {
-            $this->errors = array_merge($this->errors, array_values($result->errors));
-            $this->skipped++;
-            return null;
+        if (! preg_match('/^(neoforge|forge|fabric|quilt)-(.+)$/', $id, $match)) {
+            return ['', ''];
         }
 
-        $mv = Modversion::where('mod_id', $result->id)
-            ->where('id', '>', $maxBefore)
-            ->first();
-
-        if ($mv) {
-            return $mv->id;
-        }
-
-        if (isset($result->errors['version_exists'])) {
-            $mv = Modversion::where('mod_id', $result->id)->orderByDesc('id')->first();
-            return $mv?->id;
-        }
-
-        if (! empty($result->errors)) {
-            $this->errors = array_merge($this->errors, array_values($result->errors));
-            $this->skipped++;
-        }
-
-        return null;
+        return [$match[1], $match[2]];
     }
 
-    private function installFromDirectUrl(string $url, string $filePath): ?int
+    private function folderFromPath(string $path): string
     {
-        $filename = basename($filePath);
-        $slug = $this->slugFromFilename($filename);
+        $folder = trim(dirname(str_replace('\\', '/', $path)), './');
 
-        try {
-            $tmpPath = tempnam(sys_get_temp_dir(), 'solder_mod_');
-            $fp = fopen($tmpPath, 'wb');
-            $ch = curl_init($url);
-            curl_setopt_array($ch, [
-                CURLOPT_FILE           => $fp,
-                CURLOPT_FOLLOWLOCATION => true,
-                CURLOPT_USERAGENT      => 'TechnicPack/TechnicSolder/' . SOLDER_VERSION,
-                CURLOPT_TIMEOUT        => 60,
-            ]);
-            curl_exec($ch);
-            $curlError = curl_error($ch);
-            curl_close($ch);
-            fclose($fp);
-
-            if ($curlError) {
-                $this->errors[] = "Failed to download $filename: $curlError";
-                $this->skipped++;
-                unlink($tmpPath);
-                return null;
-            }
-
-            $zip = new ZipArchive();
-            if ($zip->open($tmpPath, ZipArchive::RDONLY) !== true) {
-                $this->errors[] = "Could not open $filename as a zip/jar archive";
-                $this->skipped++;
-                unlink($tmpPath);
-                return null;
-            }
-
-            $modVersion = $this->parseVersionFromJar($zip);
-            $zip->close();
-
-            if (empty($modVersion)) {
-                $this->errors[] = "Could not detect version for $filename";
-                $this->skipped++;
-                unlink($tmpPath);
-                return null;
-            }
-
-            $mod = Mod::firstOrCreate(['name' => $slug], ['pretty_name' => $slug]);
-
-            $existing = Modversion::where(['mod_id' => $mod->id, 'version' => $modVersion])->first();
-            if ($existing) {
-                unlink($tmpPath);
-                return $existing->id;
-            }
-
-            $location = config('solder.repo_location');
-            $finalPath = $location . "mods/$slug/$slug-$modVersion.zip";
-            if (filter_var($finalPath, FILTER_VALIDATE_URL)) {
-                $this->errors[] = "Remote repo — cannot save $filename";
-                $this->skipped++;
-                unlink($tmpPath);
-                return null;
-            }
-
-            if (! file_exists(dirname($finalPath))) {
-                mkdir(dirname($finalPath), 0777, true);
-            }
-
-            $out = new ZipArchive();
-            $out->open($finalPath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
-            $out->addFile($tmpPath, "mods/$filename");
-            $out->close();
-            unlink($tmpPath);
-
-            $mv = new Modversion();
-            $mv->mod_id = $mod->id;
-            $mv->version = $modVersion;
-            $mv->filesize = filesize($finalPath);
-            $mv->md5 = md5_file($finalPath);
-            $mv->save();
-
-            return $mv->id;
-        } catch (\Throwable $e) {
-            $this->errors[] = "Could not install $filename: " . $e->getMessage();
-            $this->skipped++;
-            return null;
-        }
+        return str_contains($folder, '..') ? 'mods' : ($folder ?: 'mods');
     }
 
     private function slugFromFilename(string $filename): string
     {
         $base = pathinfo($filename, PATHINFO_FILENAME);
-        $parts = preg_split('/[-_+]/', $base);
         $slugParts = [];
-        foreach ($parts as $part) {
-            if (preg_match('/^\d/', $part)) {
+        foreach (preg_split('/[-_+ ]/', $base) as $part) {
+            if (preg_match('/^v?\d/i', $part)) {
                 break;
             }
             $slugParts[] = $part;
         }
-        $slug = Str::slug(implode('-', $slugParts));
-        return $slug ?: Str::slug($base);
-    }
 
-    private function parseVersionFromJar(ZipArchive $zip): string
-    {
-        $fabricData = $zip->getFromName('fabric.mod.json');
-        if ($fabricData !== false) {
-            $data = json_decode($fabricData);
-            if ($data !== null) {
-                $mcVersion = '';
-                if (property_exists($data, 'depends') && property_exists($data->depends, 'minecraft')) {
-                    $mcVersion = preg_replace('/[^0-9\.]/i', '', explode('-', $data->depends->minecraft)[0]);
-                    $mcVersion = $mcVersion ? "$mcVersion-" : '';
-                }
-                return $mcVersion . ($data->version ?? '');
-            }
-        }
-
-        $forgeData = $zip->getFromName('mcmod.info');
-        if ($forgeData !== false) {
-            $data = json_decode($forgeData)[0] ?? null;
-            $mcVer = $data->mcversion ?? '';
-            $ver = $data->version ?? '';
-            if ($data && ! str_contains($ver, '${') && ! str_contains($mcVer, '${') && ! empty($ver)) {
-                return "$mcVer-$ver";
-            }
-        }
-
-        $riftData = $zip->getFromName('riftmod.json');
-        if ($riftData !== false) {
-            return json_decode($riftData)->version ?? '';
-        }
-
-        $tomlData = $zip->getFromName('META-INF/mods.toml');
-        if ($tomlData !== false) {
-            $parsedVersion = '';
-            if (preg_match('/\[\[mods\]\](.*?)(?=\[\[|\z)/s', $tomlData, $modsMatch) &&
-                preg_match('/\bversion\s*=\s*"([^"]+)"/', $modsMatch[1], $verMatch)) {
-                $parsedVersion = $verMatch[1];
-            }
-
-            if ($parsedVersion === '${file.jarVersion}') {
-                $manifest = $zip->getFromName('META-INF/MANIFEST.MF');
-                if ($manifest !== false &&
-                    preg_match('/^Implementation-Version:\s*(.+)$/m', $manifest, $manifestMatch)) {
-                    $parsedVersion = trim($manifestMatch[1]);
-                } else {
-                    $parsedVersion = '';
-                }
-            }
-
-            if (! empty($parsedVersion)) {
-                $mcVer = '';
-                if (preg_match_all('/\[\[dependencies\.[^\]]+\]\](.*?)(?=\[\[|\z)/s', $tomlData, $depMatches)) {
-                    foreach ($depMatches[1] as $depBlock) {
-                        if (preg_match('/\bmodId\s*=\s*"minecraft"/i', $depBlock) &&
-                            preg_match('/\bversionRange\s*=\s*"\[([0-9][0-9.]+)/i', $depBlock, $mcMatch)) {
-                            $mcVer = $mcMatch[1];
-                            break;
-                        }
-                    }
-                }
-                return empty($mcVer) ? $parsedVersion : "$mcVer-$parsedVersion";
-            }
-        }
-
-        return '';
+        return Str::slug(implode('-', $slugParts)) ?: Str::slug($base);
     }
 
     private function createModpack(string $slug, string $name): Modpack
     {
-        $modpack                  = new Modpack();
-        $modpack->name            = $name;
-        $modpack->slug            = $slug;
-        $modpack->hidden          = true;
-        $modpack->icon_url        = asset('/resources/default/icon.png');
-        $modpack->logo_url        = asset('/resources/default/logo.png');
-        $modpack->background_url  = asset('/resources/default/background.jpg');
+        $modpack = new Modpack;
+        $modpack->name = $name;
+        $modpack->slug = $slug;
+        $modpack->hidden = true;
+        $modpack->icon_url = asset('/resources/default/icon.png');
+        $modpack->logo_url = asset('/resources/default/logo.png');
+        $modpack->background_url = asset('/resources/default/background.jpg');
         $modpack->save();
 
         return $modpack;
     }
 
-    private function createBuild(Modpack $modpack, string $version, string $mcVersion, string $loaderStr): Build
+    private function createBuild(Modpack $modpack, string $version, string $minecraft, string $loader): Build
     {
-        $build              = new Build();
-        $build->modpack_id  = $modpack->id;
-        $build->version     = $version;
-        $build->minecraft   = $mcVersion;
-        $build->forge       = $loaderStr ?: null;
+        $build = new Build;
+        $build->modpack_id = $modpack->id;
+        $build->version = $version;
+        $build->minecraft = $minecraft;
+        $build->forge = $loader ?: null;
         $build->is_published = false;
         $build->save();
 
         return $build;
     }
 
-    private function buildResult(Modpack $modpack, Build $build): array
+    private function fail(string ...$messages): void
+    {
+        array_push($this->errors, ...$messages);
+        $this->skipped++;
+    }
+
+    private function result(Modpack $modpack, Build $build): array
     {
         return [
             'modpack_id' => $modpack->id,
-            'build_id'   => $build->id,
-            'imported'   => $this->imported,
-            'skipped'    => $this->skipped,
-            'errors'     => $this->errors,
+            'build_id' => $build->id,
+            'imported' => $this->imported,
+            'skipped' => $this->skipped,
+            'errors' => $this->errors,
         ];
     }
 }

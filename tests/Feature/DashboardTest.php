@@ -39,7 +39,7 @@ final class DashboardTest extends TestCase
         $response = $this->get('/dashboard');
 
         $response->assertOk();
-        $response->assertSee('Unused Mod Versions');
+        $response->assertSee('Unused mod versions');
         $response->assertSee('UnusedMod');
     }
 
@@ -51,7 +51,7 @@ final class DashboardTest extends TestCase
         $response = $this->get('/dashboard');
 
         $response->assertOk();
-        $response->assertSee('Unused Mod Versions');
-        $response->assertSee('No unused mod versions found.');
+        $response->assertSee('Unused mod versions');
+        $response->assertSee('Every mod version is used by at least one build.');
     }
 }

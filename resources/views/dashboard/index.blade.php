@@ -1,199 +1,194 @@
 @extends('layouts.master')
 @section('title')
-    <title>Dashboard - Technic Solder</title>
+    <title>Overview - Technic Solder</title>
 @stop
 @section('content')
-    <div class="mb-6">
-        <h1 class="text-2xl font-bold">Dashboard</h1>
-        <p class="text-gray-500 dark:text-gray-400 text-sm mt-1">Welcome to Technic Solder</p>
+    <div class="page-header">
+        <div>
+            <h1 class="page-title">Overview</h1>
+            <p class="page-subtitle">Welcome back, {{ Auth::user()->username }}.</p>
+        </div>
+        <div class="flex items-center gap-2">
+            <a href="{{ url('mod/create') }}" class="ui-btn ui-btn-secondary">Add mod</a>
+            <a href="{{ url('modpack/create') }}" class="ui-btn ui-btn-primary">
+                <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+                New modpack
+            </a>
+        </div>
     </div>
 
     @session('permission')
-        <div class="ui-alert ui-alert-danger mb-4 p-4">
+        <div class="ui-alert ui-alert-danger mb-6 p-4">
             {{ $value }}
         </div>
     @endsession
 
-    <div class="space-y-6">
-        {{-- Recently Updated Modpacks --}}
-        <div class="ui-card" x-data="{ open: true }">
-            <button @click="open = !open" class="w-full flex items-center justify-between px-5 py-4 text-left">
-                <h2 class="font-semibold text-gray-900 dark:text-white">Recently Updated Modpacks</h2>
-                <svg class="size-5 text-gray-400 transition-transform" :class="open && 'rotate-180'" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>
-            </button>
-            <div x-show="open" x-collapse>
-                <div class="overflow-x-auto border-t border-gray-200 dark:border-gray-800">
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr class="ui-table-head">
-                                <th class="px-5 py-3">#</th>
-                                <th class="px-5 py-3">Build</th>
-                                <th class="px-5 py-3">Modpack</th>
-                                <th class="px-5 py-3">MC Version</th>
-                                <th class="px-5 py-3">Mods</th>
-                                <th class="px-5 py-3">Updated</th>
-                                <th class="px-5 py-3"></th>
-                            </tr>
-                        </thead>
-                        <tbody class="ui-table-body">
-                            @forelse ($builds as $build)
-                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/30">
-                                    <td class="px-5 py-3 text-gray-500 dark:text-gray-400">{{ $build->id }}</td>
-                                    <td class="px-5 py-3 font-medium">{{ $build->version }}</td>
-                                    <td class="px-5 py-3">{{ $build->modpack->name }}</td>
-                                    <td class="px-5 py-3">{{ $build->minecraft }}</td>
-                                    <td class="px-5 py-3">{{ $build->modversions_count }}</td>
-                                    <td class="px-5 py-3 text-gray-500 dark:text-gray-400">{{ $build->updated_at->diffForHumans() }}</td>
-                                    <td class="px-5 py-3">
-                                        <a href="{{ url('/modpack/build/'.$build->id) }}" class="text-blue-600 dark:text-blue-400 hover:underline text-sm">Manage</a>
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="7" class="px-5 py-8 text-center text-sm text-gray-500 dark:text-gray-400">No recently updated modpacks.</td>
-                                </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+    {{-- Stats --}}
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+        <a href="{{ url('modpack/list') }}" class="ui-stat group hover:border-gray-300 dark:hover:border-gray-700 transition-colors">
+            <p class="ui-stat-label">Modpacks</p>
+            <p class="ui-stat-value" x-text="modpacks.length">&nbsp;</p>
+        </a>
+        <div class="ui-stat">
+            <p class="ui-stat-label">Latest build</p>
+            @if ($builds->isNotEmpty())
+                <p class="ui-stat-value font-mono text-xl">{{ $builds->first()->version }}</p>
+                <p class="mt-0.5 text-xs text-gray-500 truncate">{{ $builds->first()->modpack->name }} · {{ $builds->first()->updated_at->diffForHumans() }}</p>
+            @else
+                <p class="ui-stat-value text-gray-300 dark:text-gray-700">-</p>
+            @endif
         </div>
-
-        {{-- Recently Added Mod Versions --}}
-        <div class="ui-card" x-data="{ open: true }">
-            <button @click="open = !open" class="w-full flex items-center justify-between px-5 py-4 text-left">
-                <h2 class="font-semibold text-gray-900 dark:text-white">Recently Added Mod Versions</h2>
-                <svg class="size-5 text-gray-400 transition-transform" :class="open && 'rotate-180'" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>
-            </button>
-            <div x-show="open" x-collapse>
-                <div class="overflow-x-auto border-t border-gray-200 dark:border-gray-800">
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr class="ui-table-head">
-                                <th class="px-5 py-3">Version</th>
-                                <th class="px-5 py-3">Mod</th>
-                                <th class="px-5 py-3">Author</th>
-                                <th class="px-5 py-3">Website</th>
-                                <th class="px-5 py-3">Created</th>
-                                <th class="px-5 py-3"></th>
-                            </tr>
-                        </thead>
-                        <tbody class="ui-table-body">
-                            @forelse ($modversions as $modversion)
-                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/30">
-                                    <td class="px-5 py-3 font-mono text-sm">{{ $modversion->version }}</td>
-                                    <td class="px-5 py-3">
-                                        <a href="{{ url('/mod/view/'.$modversion->mod->id) }}" class="text-blue-600 dark:text-blue-400 hover:underline">
-                                            {{ $modversion->mod->pretty_name ?: $modversion->mod->name }}
-                                        </a>
-                                    </td>
-                                    <td class="px-5 py-3 text-gray-500 dark:text-gray-400">{{ $modversion->mod->author ?: 'N/A' }}</td>
-                                    <td class="px-5 py-3">
-                                        @if ($modversion->mod->link)
-                                            <a href="{{ $modversion->mod->link }}" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 hover:underline truncate block max-w-48">{{ $modversion->mod->link }}</a>
-                                        @else
-                                            <span class="text-gray-400">N/A</span>
-                                        @endif
-                                    </td>
-                                    <td class="px-5 py-3 text-gray-500 dark:text-gray-400">{{ $modversion->created_at->diffForHumans() }}</td>
-                                    <td class="px-5 py-3">
-                                        <a href="{{ url('/mod/view/'.$modversion->mod->id.'#versions') }}" class="text-blue-600 dark:text-blue-400 hover:underline text-sm">Manage</a>
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="6" class="px-5 py-8 text-center text-sm text-gray-500 dark:text-gray-400">No recently added mod versions.</td>
-                                </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+        <div class="ui-stat">
+            <p class="ui-stat-label">Unused mod versions</p>
+            <p class="ui-stat-value">{{ $unusedModversions->count() }}{{ $unusedModversions->count() >= 20 ? '+' : '' }}</p>
         </div>
+        <a href="{{ url('solder/update') }}" class="ui-stat hover:border-gray-300 dark:hover:border-gray-700 transition-colors">
+            <p class="ui-stat-label">Solder</p>
+            <p class="ui-stat-value font-mono text-xl">v{{ SOLDER_VERSION }}</p>
+            @if (Cache::get('update'))
+                <p class="mt-0.5 flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400"><span class="size-1.5 rounded-full bg-amber-500"></span>Update available</p>
+            @else
+                <p class="mt-0.5 flex items-center gap-1.5 text-xs text-gray-500"><span class="size-1.5 rounded-full bg-emerald-500"></span>Up to date</p>
+            @endif
+        </a>
+    </div>
 
-        {{-- Unused Mod Versions --}}
-        <div class="ui-card" x-data="{ open: true }">
-            <button @click="open = !open" class="w-full flex items-center justify-between px-5 py-4 text-left">
-                <h2 class="font-semibold text-gray-900 dark:text-white">
-                    Unused Mod Versions
-                    <span class="ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">{{ $unusedModversions->count() }}</span>
-                </h2>
-                <svg class="size-5 text-gray-400 transition-transform" :class="open && 'rotate-180'" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>
-            </button>
-            <div x-show="open" x-collapse>
-                <div class="overflow-x-auto border-t border-gray-200 dark:border-gray-800">
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr class="ui-table-head">
-                                <th class="px-5 py-3">Mod Name</th>
-                                <th class="px-5 py-3">Version</th>
-                                <th class="px-5 py-3">MD5</th>
-                                <th class="px-5 py-3">Filesize</th>
-                                <th class="px-5 py-3">Created</th>
-                            </tr>
-                        </thead>
-                        <tbody class="ui-table-body">
-                            @forelse ($unusedModversions as $modversion)
-                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/30">
-                                    <td class="px-5 py-3">
-                                        <a href="{{ url('/mod/view/'.$modversion->mod->id) }}" class="text-blue-600 dark:text-blue-400 hover:underline">
-                                            {{ $modversion->mod->pretty_name ?: $modversion->mod->name }}
-                                        </a>
-                                    </td>
-                                    <td class="px-5 py-3 font-mono text-sm">{{ $modversion->version }}</td>
-                                    <td class="px-5 py-3 font-mono text-xs text-gray-500 dark:text-gray-400">{{ Str::limit($modversion->md5, 12) }}</td>
-                                    <td class="px-5 py-3 text-gray-500 dark:text-gray-400">{{ $modversion->filesize ? $modversion->humanFilesize() : 'N/A' }}</td>
-                                    <td class="px-5 py-3 text-gray-500 dark:text-gray-400">{{ $modversion->created_at->diffForHumans() }}</td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="5" class="px-5 py-8 text-center text-sm text-gray-500 dark:text-gray-400">No unused mod versions found.</td>
-                                </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {{-- Recent builds --}}
+        <section class="ui-card lg:col-span-2 overflow-hidden">
+            <div class="ui-card-header flex items-center justify-between">
+                <h2 class="section-title">Recently updated builds</h2>
+                <a href="{{ url('modpack/list') }}" class="text-xs text-gray-500 hover:text-gray-950 dark:hover:text-white transition-colors">All modpacks →</a>
             </div>
-        </div>
+            <ul class="divide-y divide-gray-100 dark:divide-gray-900">
+                @forelse ($builds as $build)
+                    <li>
+                        <a href="{{ url('/modpack/build/'.$build->id) }}" class="flex items-center gap-4 px-5 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors group">
+                            <img src="{{ $build->modpack->icon_url ?? asset('/resources/default/icon.png') }}" alt="" class="size-9 shrink-0 rounded-lg border border-gray-200 dark:border-gray-800 object-cover">
+                            <div class="min-w-0 flex-1">
+                                <p class="text-sm font-medium text-gray-950 dark:text-white truncate">{{ $build->modpack->name }}</p>
+                                <p class="mt-0.5 flex items-center gap-2 text-xs text-gray-500">
+                                    <span class="font-mono text-gray-700 dark:text-gray-300">{{ $build->version }}</span>
+                                    <span class="text-gray-300 dark:text-gray-700">·</span>
+                                    <span>MC {{ $build->minecraft }}</span>
+                                    <span class="text-gray-300 dark:text-gray-700">·</span>
+                                    <span>{{ $build->modversions_count }} {{ Str::plural('mod', $build->modversions_count) }}</span>
+                                </p>
+                            </div>
+                            <span class="hidden sm:block text-xs text-gray-500 shrink-0">{{ $build->updated_at->diffForHumans() }}</span>
+                            <svg class="size-4 shrink-0 text-gray-300 dark:text-gray-700 group-hover:text-gray-950 dark:group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5"/></svg>
+                        </a>
+                    </li>
+                @empty
+                    <li class="px-5 py-12 text-center">
+                        <p class="text-sm font-medium text-gray-950 dark:text-white">No builds yet</p>
+                        <p class="mt-1 text-sm text-gray-500">Create a modpack, then add its first build.</p>
+                        <a href="{{ url('modpack/create') }}" class="ui-btn ui-btn-secondary mt-4">New modpack</a>
+                    </li>
+                @endforelse
+            </ul>
+        </section>
 
-        {{-- Changelog --}}
-        <div class="ui-card" x-data="{ open: true }">
-            <button @click="open = !open" class="w-full flex items-center justify-between px-5 py-4 text-left">
-                <h2 class="font-semibold text-gray-900 dark:text-white">Changelog</h2>
-                <svg class="size-5 text-gray-400 transition-transform" :class="open && 'rotate-180'" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>
-            </button>
-            <div x-show="open" x-collapse>
-                <div class="px-5 pb-5 border-t border-gray-200 dark:border-gray-800 pt-4">
-                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-4 leading-relaxed">
-                        Running Solder
-                        @if (Cache::get('update'))
-                            <code class="ml-1.5 px-2 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-xs font-semibold align-middle">v{{ SOLDER_VERSION }}</code>
-                            <span class="text-xs text-red-600 dark:text-red-400">(update available)</span>
-                        @else
-                            <code class="ml-1.5 px-2 py-0.5 rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs font-semibold align-middle">v{{ SOLDER_VERSION }}</code>
-                        @endif
-                    </p>
-                    @if (array_key_exists('error', $changelog))
-                        <div class="ui-alert ui-alert-warning p-3">
-                            {{ $changelog['error'] }}
-                        </div>
-                    @else
-                        <div class="divide-y divide-gray-100 dark:divide-gray-800">
-                            @foreach ($changelog as $change)
+        <div class="space-y-6 min-w-0">
+            {{-- Recent mod versions --}}
+            <section class="ui-card overflow-hidden">
+                <div class="ui-card-header flex items-center justify-between">
+                    <h2 class="section-title">New mod versions</h2>
+                    <a href="{{ url('mod/list') }}" class="text-xs text-gray-500 hover:text-gray-950 dark:hover:text-white transition-colors">All mods →</a>
+                </div>
+                <ul class="divide-y divide-gray-100 dark:divide-gray-900">
+                    @forelse ($modversions as $modversion)
+                        <li>
+                            <a href="{{ url('/mod/view/'.$modversion->mod->id.'#versions') }}" class="flex items-center justify-between gap-3 px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors">
+                                <div class="min-w-0">
+                                    <p class="text-sm font-medium text-gray-950 dark:text-white truncate">{{ $modversion->mod->pretty_name ?: $modversion->mod->name }}</p>
+                                    <p class="mt-0.5 text-xs text-gray-500 truncate">{{ $modversion->mod->author ?: 'Unknown author' }} · {{ $modversion->created_at->diffForHumans() }}</p>
+                                </div>
+                                <span class="ui-badge font-mono shrink-0 max-w-32 truncate">{{ $modversion->version }}</span>
+                            </a>
+                        </li>
+                    @empty
+                        <li class="px-5 py-10 text-center text-sm text-gray-500">No mod versions yet.</li>
+                    @endforelse
+                </ul>
+            </section>
+
+            {{-- Changelog --}}
+            <section class="ui-card overflow-hidden">
+                <div class="ui-card-header flex items-center justify-between">
+                    <h2 class="section-title">Changelog</h2>
+                    <a href="https://github.com/TechnicPack/TechnicSolder/commits" target="_blank" rel="noopener noreferrer" class="text-xs text-gray-500 hover:text-gray-950 dark:hover:text-white transition-colors">GitHub ↗</a>
+                </div>
+                @if (array_key_exists('error', $changelog))
+                    <div class="p-4">
+                        <div class="ui-alert ui-alert-warning p-3">{{ $changelog['error'] }}</div>
+                    </div>
+                @else
+                    <ul class="max-h-80 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-900">
+                        @foreach ($changelog as $change)
+                            <li>
                                 <a href="{{ $change['html_url'] }}" target="_blank" rel="noopener noreferrer"
-                                   class="flex items-start gap-3 py-2.5 group hover:bg-gray-50 dark:hover:bg-gray-800/40 -mx-2 px-2 rounded transition-colors">
-                                    <code class="shrink-0 mt-0.5 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-[11px] text-gray-500 dark:text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-300 transition-colors">{{ substr($change['sha'], 0, 7) }}</code>
-                                    <span class="text-sm text-gray-700 dark:text-gray-300">{{ explode("\n", $change['commit']['message'], 2)[0] }}</span>
+                                   class="flex items-start gap-3 px-5 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors">
+                                    <code class="shrink-0 mt-px font-mono text-[11px] text-gray-400">{{ substr($change['sha'], 0, 7) }}</code>
+                                    <span class="text-sm text-gray-700 dark:text-gray-300 line-clamp-2">{{ explode("\n", $change['commit']['message'], 2)[0] }}</span>
                                 </a>
-                            @endforeach
-                        </div>
-                    @endif
-                </div>
-            </div>
+                            </li>
+                        @endforeach
+                    </ul>
+                @endif
+            </section>
         </div>
     </div>
 
-    <p class="mt-6 text-sm text-gray-500 dark:text-gray-500">
-        <a href="https://github.com/TechnicPack/TechnicSolder" target="_blank" rel="noopener noreferrer" class="hover:underline">Technic Solder</a> is open source, under the MIT license.
+    {{-- Unused mod versions --}}
+    <section class="ui-card overflow-hidden mt-6" x-data="{ open: {{ $unusedModversions->isEmpty() ? 'false' : 'true' }} }">
+        <button type="button" @click="open = !open" class="w-full flex items-center justify-between gap-3 px-5 py-3.5 text-left" :aria-expanded="open">
+            <span class="flex items-center gap-2">
+                <h2 class="section-title">Unused mod versions</h2>
+                <span class="ui-badge tabular-nums">{{ $unusedModversions->count() }}</span>
+            </span>
+            <span class="flex items-center gap-3 text-xs text-gray-500">
+                <span class="hidden sm:inline">Not included in any build</span>
+                <svg class="size-4 transition-transform" :class="open && 'rotate-180'" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>
+            </span>
+        </button>
+        <div x-show="open" x-collapse>
+            @if ($unusedModversions->isEmpty())
+                <p class="px-5 pb-6 text-sm text-gray-500">Every mod version is used by at least one build.</p>
+            @else
+                <div class="overflow-x-auto border-t border-gray-200 dark:border-gray-800">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="ui-table-head">
+                                <th class="px-5 py-2.5">Mod</th>
+                                <th class="px-5 py-2.5">Version</th>
+                                <th class="px-5 py-2.5 hidden md:table-cell">MD5</th>
+                                <th class="px-5 py-2.5 hidden sm:table-cell">Size</th>
+                                <th class="px-5 py-2.5 hidden sm:table-cell">Created</th>
+                            </tr>
+                        </thead>
+                        <tbody class="ui-table-body">
+                            @foreach ($unusedModversions as $modversion)
+                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-900/50">
+                                    <td class="px-5 py-2.5">
+                                        <a href="{{ url('/mod/view/'.$modversion->mod->id) }}" class="font-medium text-gray-950 dark:text-white hover:underline underline-offset-2">
+                                            {{ $modversion->mod->pretty_name ?: $modversion->mod->name }}
+                                        </a>
+                                    </td>
+                                    <td class="px-5 py-2.5 font-mono text-xs text-gray-700 dark:text-gray-300">{{ $modversion->version }}</td>
+                                    <td class="px-5 py-2.5 font-mono text-xs text-gray-400 hidden md:table-cell">{{ Str::limit($modversion->md5, 12) }}</td>
+                                    <td class="px-5 py-2.5 text-gray-500 hidden sm:table-cell">{{ $modversion->filesize ? $modversion->humanFilesize() : '-' }}</td>
+                                    <td class="px-5 py-2.5 text-gray-500 hidden sm:table-cell">{{ $modversion->created_at->diffForHumans() }}</td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @endif
+        </div>
+    </section>
+
+    <p class="mt-8 text-xs text-gray-400 dark:text-gray-600">
+        <a href="https://github.com/TechnicPack/TechnicSolder" target="_blank" rel="noopener noreferrer" class="hover:text-gray-600 dark:hover:text-gray-400">Technic Solder</a> is open source under the MIT license.
     </p>
 @endsection

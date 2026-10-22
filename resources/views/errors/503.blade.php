@@ -9,7 +9,7 @@
     @include('partial.dark-mode-script')
     @vite(['resources/css/app.css'])
 </head>
-<body class="bg-gray-50 dark:bg-gray-950 min-h-screen flex items-center justify-center p-4">
+<body class="auth-shell text-gray-900 dark:text-gray-100 min-h-screen flex items-center justify-center p-4">
     <div class="text-center max-w-md">
         <p class="text-7xl font-bold text-gray-200 dark:text-gray-800">503</p>
         <h1 class="mt-4 text-2xl font-bold text-gray-900 dark:text-white">Down for maintenance</h1>

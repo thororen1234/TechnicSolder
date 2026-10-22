@@ -1,0 +1,13 @@
+# Supply-chain hardening.
+
+# Dependency lifecycle scripts (preinstall/install/postinstall) are blocked by
+# default, and the install fails on any unreviewed one (strictDepBuilds). This
+# project needs none; fsevents (macOS-only, optional) degrades gracefully to
+# file-watch polling.
+allowBuilds:
+  fsevents: false
+
+# Dependency cooldown: only install versions published more than 7 days ago
+# (value in minutes), so malicious or yanked releases are caught by the
+# ecosystem before entering our tree.
+minimumReleaseAge: 10080

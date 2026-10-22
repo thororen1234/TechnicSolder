@@ -1,6 +1,6 @@
 @extends('layouts.master')
 @section('title')
-    <title>{{ $build->version }} &ndash; {{ $build->modpack->name }} &ndash; Technic Solder</title>
+    <title>{{ $build->version }} - {{ $build->modpack->name }} - Technic Solder</title>
 @stop
 @section('content')
     <div class="mb-6">
@@ -10,7 +10,7 @@
 
     <div class="ui-card">
         <div class="ui-card-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <span class="font-semibold text-gray-900 dark:text-white">{{ $build->modpack->name }} &mdash; build {{ $build->version }}</span>
+            <span class="font-semibold text-gray-900 dark:text-white">{{ $build->modpack->name }} - build {{ $build->version }}</span>
             <div class="flex items-center gap-2">
                 <a href="{{ url('/modpack/build/' . $build->id) }}"
                    class="ui-btn ui-btn-sm ui-btn-primary">

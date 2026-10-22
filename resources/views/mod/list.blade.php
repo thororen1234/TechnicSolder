@@ -1,102 +1,121 @@
 @extends('layouts.master')
 @section('title')
-    <title>Mod Library - Technic Solder</title>
+    <title>Mods - Technic Solder</title>
 @stop
 @section('content')
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-        <h1 class="text-2xl font-bold">Mod Library</h1>
-        <a href="{{ URL::to('mod/create') }}"
-           class="ui-btn ui-btn-primary self-start">
-            Add Mod
-        </a>
-        <a href="{{ URL::to('mod/import') }}"
-           class="self-start bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-500/15 dark:text-blue-400 dark:hover:bg-blue-500/25 font-medium py-2 px-4 rounded-lg text-sm transition-colors">
-            Import Mod
-        </a>
-    </div>
-
-    <div class="ui-card">
-        <div class="ui-card-header">
-            <h2 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Mod List</h2>
-        </div>
-        <div class="p-5">
-            @session('success')
-                <div class="ui-alert ui-alert-success mb-4 p-4">
-                    {{ $value }}
-                </div>
-            @endsession
-            @include('partial.form-errors')
-
-            <div x-data="dataTable({
-                rows: @js($mods->map(fn($m) => [
-                    'id' => $m->id,
-                    'name' => $m->name,
-                    'pretty_name' => $m->pretty_name,
-                    'display_name' => ($m->pretty_name ?: $m->name) . ' ' . $m->name,
-                    'latest_version' => $m->latestVersion?->version ?? 'N/A',
-                    'author' => $m->author ?: 'N/A',
-                    'link' => $m->link,
-                ])),
-                sortKey: 'display_name', tableName: 'mod-list', types: { id: 'number' },
-                searchKeys: ['name', 'pretty_name', 'display_name', 'latest_version', 'author', 'link']
-            })">
-                @include('partial.data-table.toolbar', ['placeholder' => 'Search mods...'])
-
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr class="ui-table-head">
-                                <th class="px-5 py-3 hidden sm:table-cell" @click="sort('id')" role="button">
-                                    <span class="inline-flex items-center gap-1"># <span x-show="sortKey === 'id'" x-text="sortDir === 'asc' ? '↑' : '↓'"></span></span>
-                                </th>
-                                @include('partial.data-table.sort-header', ['key' => 'display_name', 'label' => 'Mod Name'])
-                                @include('partial.data-table.sort-header', ['key' => 'latest_version', 'label' => 'Latest Version'])
-                                <th class="px-5 py-3 hidden md:table-cell" @click="sort('author')" role="button">
-                                    <span class="inline-flex items-center gap-1">Author <span x-show="sortKey === 'author'" x-text="sortDir === 'asc' ? '↑' : '↓'"></span></span>
-                                </th>
-                                <th class="px-5 py-3 hidden lg:table-cell" @click="sort('link')" role="button">
-                                    <span class="inline-flex items-center gap-1">Website <span x-show="sortKey === 'link'" x-text="sortDir === 'asc' ? '↑' : '↓'"></span></span>
-                                </th>
-                                <th class="px-5 py-3 hidden sm:table-cell">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody class="ui-table-body">
-                            <template x-for="row in paged" :key="row.id">
-                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
-                                    <td class="px-5 py-3 text-gray-500 dark:text-gray-400 hidden sm:table-cell">
-                                        <a :href="'/mod/view/' + row.id" class="hover:text-blue-600 dark:hover:text-blue-400" x-text="row.id"></a>
-                                    </td>
-                                    <td class="px-5 py-3">
-                                        <a :href="'/mod/view/' + row.id" class="text-blue-600 dark:text-blue-400 hover:underline font-medium" x-text="row.pretty_name || row.name"></a>
-                                        <template x-if="row.pretty_name">
-                                            <span class="text-gray-500 dark:text-gray-400 text-xs ml-1" x-text="'(' + row.name + ')'"></span>
-                                        </template>
-                                    </td>
-                                    <td class="px-5 py-3 text-gray-700 dark:text-gray-300" x-text="row.latest_version"></td>
-                                    <td class="px-5 py-3 text-gray-700 dark:text-gray-300 hidden md:table-cell" x-text="row.author"></td>
-                                    <td class="px-5 py-3 hidden lg:table-cell">
-                                        <template x-if="row.link">
-                                            <a :href="row.link" target="_blank" rel="noopener noreferrer"
-                                               class="text-blue-600 dark:text-blue-400 hover:underline truncate block max-w-xs" x-text="row.link"></a>
-                                        </template>
-                                        <template x-if="!row.link">
-                                            <span class="text-gray-400 dark:text-gray-500">N/A</span>
-                                        </template>
-                                    </td>
-                                    <td class="px-5 py-3 hidden sm:table-cell">
-                                        <a :href="'/mod/view/' + row.id"
-                                           class="ui-btn ui-btn-sm ui-btn-primary inline-block">
-                                            Manage
-                                        </a>
-                                    </td>
-                                </tr>
-                            </template>
-                        </tbody>
-                    </table>
-                </div>
-
-                @include('partial.data-table.pagination')
+    <div x-data="dataTable({
+        rows: @js($mods->map(fn($m) => [
+            'id' => $m->id,
+            'name' => $m->name,
+            'pretty_name' => $m->pretty_name,
+            'display_name' => ($m->pretty_name ?: $m->name) . ' ' . $m->name,
+            'latest_version' => $m->latestVersion?->version ?? '',
+            'author' => $m->author ?: '',
+            'link' => $m->link,
+        ])->values()),
+        sortKey: 'display_name', tableName: 'mod-list', types: { id: 'number' },
+        searchKeys: ['name', 'pretty_name', 'display_name', 'latest_version', 'author', 'link']
+    })">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">Mods</h1>
+                <p class="page-subtitle"><span x-text="totalRows"></span> <span x-text="totalRows === 1 ? 'mod' : 'mods'"></span> in the library</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <a href="{{ url('mod/import') }}" class="ui-btn ui-btn-secondary">Import</a>
+                <a href="{{ url('mod/create') }}" class="ui-btn ui-btn-primary">
+                    <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+                    New mod
+                </a>
             </div>
         </div>
+
+        @session('success')
+            <div class="ui-alert ui-alert-success mb-6 p-4">
+                {{ $value }}
+            </div>
+        @endsession
+        @include('partial.form-errors')
+
+        <section class="ui-card overflow-hidden">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-3.5 border-b border-gray-200 dark:border-gray-800">
+                <div class="relative sm:w-80">
+                    <svg class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/></svg>
+                    <input type="text" x-model.debounce.150ms="search" placeholder="Filter by name, author, version…" class="ui-control py-1.5 pl-9">
+                </div>
+                <label class="flex items-center gap-2 text-sm text-gray-500">
+                    Show
+                    <select x-model.number="pageSize" @change="page = 1" class="ui-control w-auto py-1.5 pl-2.5">
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                </label>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="ui-table-head">
+                            @include('partial.data-table.sort-header', ['key' => 'display_name', 'label' => 'Mod'])
+                            @include('partial.data-table.sort-header', ['key' => 'latest_version', 'label' => 'Latest version'])
+                            <th class="px-5 py-3 hidden md:table-cell cursor-pointer select-none" @click="sort('author')">Author <span x-show="sortKey === 'author'" x-text="sortDir === 'asc' ? '↑' : '↓'"></span></th>
+                            <th class="px-5 py-3 hidden lg:table-cell">Website</th>
+                            <th class="px-5 py-3"><span class="sr-only">Actions</span></th>
+                        </tr>
+                    </thead>
+                    <tbody class="ui-table-body">
+                        <template x-for="row in paged" :key="row.id">
+                            <tr class="hover:bg-gray-50 dark:hover:bg-gray-900/50">
+                                <td class="px-5 py-3">
+                                    <a :href="'/mod/view/' + row.id" class="font-medium text-gray-950 dark:text-white hover:underline underline-offset-2" x-text="row.pretty_name || row.name"></a>
+                                    <p class="font-mono text-xs text-gray-500" x-show="row.pretty_name" x-text="row.name"></p>
+                                </td>
+                                <td class="px-5 py-3">
+                                    <span x-show="row.latest_version" class="ui-badge font-mono max-w-48 truncate" x-text="row.latest_version"></span>
+                                    <span x-show="!row.latest_version" class="text-gray-400 dark:text-gray-600">-</span>
+                                </td>
+                                <td class="px-5 py-3 text-gray-600 dark:text-gray-400 hidden md:table-cell" x-text="row.author || '-'"></td>
+                                <td class="px-5 py-3 hidden lg:table-cell">
+                                    <template x-if="row.link">
+                                        <a :href="row.link" target="_blank" rel="noopener noreferrer"
+                                           class="text-gray-500 hover:text-gray-950 dark:hover:text-white truncate block max-w-xs" x-text="row.link.replace(/^https?:\/\/(www\.)?/, '')"></a>
+                                    </template>
+                                    <template x-if="!row.link">
+                                        <span class="text-gray-400 dark:text-gray-600">-</span>
+                                    </template>
+                                </td>
+                                <td class="px-5 py-3 text-right">
+                                    <a :href="'/mod/view/' + row.id" class="ui-btn ui-btn-sm ui-btn-secondary">Manage</a>
+                                </td>
+                            </tr>
+                        </template>
+                        <template x-if="totalFiltered === 0">
+                            <tr>
+                                <td colspan="5" class="px-5 py-14 text-center">
+                                    <template x-if="totalRows === 0">
+                                        <div>
+                                            <p class="text-sm font-medium text-gray-950 dark:text-white">Your mod library is empty</p>
+                                            <p class="mt-1 text-sm text-gray-500">Add mods by hand or import them from a provider.</p>
+                                            <div class="mt-4 flex justify-center gap-2">
+                                                <a href="{{ url('mod/import') }}" class="ui-btn ui-btn-secondary">Import</a>
+                                                <a href="{{ url('mod/create') }}" class="ui-btn ui-btn-primary">New mod</a>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <template x-if="totalRows > 0">
+                                        <p class="text-sm text-gray-500">No mods match “<span x-text="search"></span>”.</p>
+                                    </template>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="px-5 pb-4">
+                @include('partial.data-table.pagination')
+            </div>
+        </section>
     </div>
 @endsection

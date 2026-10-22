@@ -4,23 +4,27 @@ namespace App\Mods\Providers;
 
 use App\Mods\ImportedModData;
 use App\Mods\ModProvider;
-use SimpleXMLElement;
 
+/**
+ * Minecraft Forge, packaged for Technic as bin/modpack.jar.
+ *
+ * Technic needs the universal jar for Minecraft 1.12.2 and older, and the installer jar for 1.13 and newer.
+ */
 class Forge extends ModProvider
 {
     public static function name(): string
     {
-        return "Forge";
+        return 'Forge';
     }
 
     protected static function apiUrl(): string
     {
-        return "https://maven.minecraftforge.net/net/minecraftforge/forge";
+        return 'https://maven.minecraftforge.net/net/minecraftforge/forge';
     }
 
     protected static function zipFolder(): string
     {
-        return "bin";
+        return 'bin';
     }
 
     protected static function useRawVersion(): bool
@@ -28,65 +32,53 @@ class Forge extends ModProvider
         return true;
     }
 
+    /**
+     * Forge builds grouped by Minecraft version, newest Minecraft version first, builds oldest first.
+     *
+     * @return array<string, list<string>>
+     */
     private static function getVersionsMap(): array
     {
-        $response = static::request("/maven-metadata.xml", true);
-
-        if (!$response) {
+        $xml = static::request('/maven-metadata.xml', true);
+        if (! $xml) {
             return [];
         }
 
-        libxml_use_internal_errors(true);
-        $data = simplexml_load_string($response);
+        $previous = libxml_use_internal_errors(true);
+        $data = simplexml_load_string($xml);
+        libxml_use_internal_errors($previous);
 
-        if (!$data || !isset($data->versioning->versions->version)) {
+        if (! $data || ! isset($data->versioning->versions->version)) {
             return [];
         }
 
         $versionsMap = [];
-
         foreach ($data->versioning->versions->version as $raw) {
-
-            $versionString = (string) $raw;
-
-            if (!str_contains($versionString, '-')) {
+            $parts = explode('-', (string) $raw, 2);
+            if (count($parts) !== 2 || $parts[0] === '' || $parts[1] === '') {
                 continue;
             }
 
-            [$mcVersion, $forgeVersion] = explode('-', $versionString, 2);
-
-            if (!$mcVersion || !$forgeVersion) {
-                continue;
-            }
-
-            $versionsMap[$mcVersion] ??= [];
-
-            if (!in_array($forgeVersion, $versionsMap[$mcVersion], true)) {
-                $versionsMap[$mcVersion][] = $forgeVersion;
-            }
+            [$minecraft, $forgeVersion] = $parts;
+            $versionsMap[$minecraft][] = $forgeVersion;
         }
 
-        uksort($versionsMap, fn($a, $b) => version_compare($b, $a));
+        uksort($versionsMap, fn ($a, $b) => version_compare($b, $a));
 
         return $versionsMap;
     }
 
     public static function search(string $query, int $page = 1, string $gameVersion = '', string $loader = ''): object
     {
-        $versionsMap = static::getVersionsMap();
-
         $mods = [];
 
-        foreach ($versionsMap as $mcVersion => $versions) {
-            if (!empty($query) && stripos($mcVersion, $query) === false) {
+        foreach (self::getVersionsMap() as $minecraft => $versions) {
+            if (($query !== '' && stripos($minecraft, $query) === false)
+                || ($gameVersion !== '' && stripos($minecraft, $gameVersion) === false)) {
                 continue;
             }
 
-            if (!empty($gameVersion) && stripos($mcVersion, $gameVersion) === false) {
-                continue;
-            }
-
-            $mods[] = static::generateModData($mcVersion, array_reverse($versions));
+            $mods[] = self::generateModData($minecraft, array_reverse($versions));
         }
 
         return (object) [
@@ -94,50 +86,58 @@ class Forge extends ModProvider
             'pagination' => (object) [
                 'currentPage' => 1,
                 'totalPages' => 1,
-                'totalItems' => count($mods)
-            ]
+                'totalItems' => count($mods),
+            ],
         ];
     }
 
+    /**
+     * @param  string  $modId  Minecraft version
+     */
     public static function mod(string $modId): ?ImportedModData
     {
-        $versionsMap = static::getVersionsMap();
+        $versionsMap = self::getVersionsMap();
 
-        if (!isset($versionsMap[$modId])) {
+        if (! isset($versionsMap[$modId])) {
             return null;
         }
 
-        return static::generateModData($modId, array_reverse($versionsMap[$modId]));
+        return self::generateModData($modId, array_reverse($versionsMap[$modId]));
     }
 
-    private static function generateModData($mc, $versions): ImportedModData
+    /**
+     * Whether Technic needs the universal jar (Minecraft 1.12.2 and older) rather than the installer.
+     */
+    public static function usesUniversalJar(string $minecraft): bool
     {
-        $modData = new ImportedModData();
+        return str_starts_with($minecraft, '1.') && version_compare($minecraft, '1.13', '<');
+    }
 
-        $modData->id = $mc;
-        $modData->slug = "forge";
+    private static function generateModData(string $minecraft, array $versions): ImportedModData
+    {
+        $modData = new ImportedModData;
 
-        $modData->name = "Minecraft Forge";
-        $modData->summary = "Forge mod loader";
-
-        $modData->displayName = "Minecraft Forge - MC {$mc}";
-        $modData->displaySummary = "Forge for Minecraft {$mc}";
-
-        $modData->authors = "LexManos";
-
-        $modData->thumbnailUrl = "https://files.minecraftforge.net/static/images/logo.svg";
-        $modData->thumbnailDesc = "Forge";
-        $modData->websiteUrl = "https://files.minecraftforge.net/";
-
+        $modData->id = $minecraft;
+        $modData->slug = 'forge';
+        $modData->name = 'Minecraft Forge';
+        $modData->summary = 'Forge mod loader';
+        $modData->displayName = "Minecraft Forge $minecraft";
+        $modData->displaySummary = "Forge for Minecraft $minecraft";
+        $modData->authors = 'MinecraftForge';
+        $modData->thumbnailUrl = 'https://files.minecraftforge.net/static/images/logo.svg';
+        $modData->thumbnailDesc = 'Forge';
+        $modData->websiteUrl = 'https://files.minecraftforge.net/';
         $modData->versions = [];
 
+        $classifier = static::usesUniversalJar($minecraft) ? 'universal' : 'installer';
+
         foreach ($versions as $version) {
-            $key = "{$mc}-forge-{$version}";
-            $modData->versions[$key] = (object) [
-                "url"          => "https://maven.minecraftforge.net/net/minecraftforge/forge/"
-                    . "{$mc}-{$version}/forge-{$mc}-{$version}-installer.jar",
-                "filename"     => "modpack.jar",
-                "gameVersions" => [$mc],
+            $modData->versions["$minecraft-forge-$version"] = (object) [
+                'url' => static::apiUrl()."/$minecraft-$version/forge-$minecraft-$version-$classifier.jar",
+                'filename' => 'modpack.jar',
+                'label' => $version,
+                'gameVersions' => [$minecraft],
+                'versionType' => 'release',
             ];
         }
 

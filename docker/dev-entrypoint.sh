@@ -26,9 +26,12 @@ php artisan migrate --force
 
 # Build frontend assets if not already built
 if [ ! -d public/build ]; then
-    if command -v node &> /dev/null; then
-        npm install --no-audit --no-fund
-        npm run build
+    if command -v pnpm &> /dev/null; then
+        pnpm install --frozen-lockfile
+        pnpm run build
+    elif command -v corepack &> /dev/null; then
+        COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm install --frozen-lockfile
+        COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm run build
     fi
 fi
 

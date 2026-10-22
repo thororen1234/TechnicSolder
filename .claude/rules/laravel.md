@@ -21,4 +21,4 @@
 
 ## Vite Error
 
-- `ViteException: Unable to locate file in Vite manifest` — run `npm run build` or ask user to run `npm run dev` or `composer run dev`.
+- `ViteException: Unable to locate file in Vite manifest` — run `pnpm run build` or ask user to run `pnpm run dev` or `composer run dev`.

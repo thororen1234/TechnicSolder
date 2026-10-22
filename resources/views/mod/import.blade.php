@@ -1,166 +1,177 @@
 @extends('layouts.master')
 
 @section('title')
-    <title>Import Mod - Technic Solder</title>
+    <title>Import Mods - Technic Solder</title>
 @stop
 
 @section('content')
-    <div class="mb-6">
-        <h1 class="text-2xl font-bold">Mod Library</h1>
+    @php
+        $loaderProviders = ['fabric', 'quilt', 'forge', 'neoforge'];
+        $isLoaderProvider = in_array($provider, $loaderProviders);
+        $filters = array_filter(['provider' => $provider, 'query' => $query, 'game_version' => $gameVersion, 'release_type' => $releaseType, 'loader' => $loader]);
+        $baseUrl = url('mod/import').'?'.http_build_query($filters);
+        $detailsQuery = http_build_query(array_filter(['game_version' => $gameVersion, 'loader' => $isLoaderProvider ? '' : $loader]));
+    @endphp
+
+    <div class="page-header">
+        <div>
+            <h1 class="page-title">Import mods</h1>
+            <p class="page-subtitle">Pull mods from Modrinth or CurseForge, or add a mod loader to your library.</p>
+        </div>
     </div>
 
-    <div class="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800">
-        <div class="px-5 py-4 border-b border-gray-200 dark:border-gray-800">
-            <h2 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Import Mod</h2>
+    @if ($errors->any())
+        <div class="ui-alert ui-alert-danger mb-6 p-4 space-y-1">
+            @foreach ($errors->all() as $error)
+                <p>{{ $error }}</p>
+            @endforeach
         </div>
+    @endif
 
-        <div class="p-5">
+    @session('success')
+        <div class="ui-alert ui-alert-success mb-6 p-4">{{ $value }}</div>
+    @endsession
 
-            @if ($errors->any())
-                <div class="mb-4 p-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-                    @foreach ($errors->all() as $error)
-                        <p class="text-sm text-red-700 dark:text-red-300">{{ $error }}</p>
-                    @endforeach
-                </div>
-            @endif
+    {{-- Search --}}
+    <form method="GET" action="{{ url('mod/import') }}" class="ui-card p-4 mb-6"
+          x-data="{
+              source: @js($isLoaderProvider ? 'loader' : $provider),
+              loaderProvider: @js($isLoaderProvider ? $provider : 'fabric'),
+              get provider() { return this.source === 'loader' ? this.loaderProvider : this.source },
+          }">
+        <input type="hidden" name="provider" :value="provider" value="{{ $provider }}">
+        <div class="flex flex-wrap items-end gap-3">
+            <div class="w-full sm:w-auto">
+                <label for="inputSource" class="ui-label">Source</label>
+                <select id="inputSource" x-model="source" class="ui-control sm:w-40">
+                    <option value="modrinth">Modrinth</option>
+                    <option value="curseforge">CurseForge</option>
+                    <option value="loader">Mod loader</option>
+                </select>
+            </div>
 
-            @if (session('success'))
-                <div class="mb-4 p-4 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
-                    <p class="text-sm text-green-700 dark:text-green-300">{{ session('success') }}</p>
-                </div>
-            @endif
+            <div class="w-full sm:w-auto" x-show="source === 'loader'" @if (! $isLoaderProvider) x-cloak @endif>
+                <label for="inputLoaderProvider" class="ui-label">Loader</label>
+                <select id="inputLoaderProvider" x-model="loaderProvider" class="ui-control sm:w-36">
+                    <option value="fabric">Fabric</option>
+                    <option value="quilt">Quilt</option>
+                    <option value="forge">Forge</option>
+                    <option value="neoforge">NeoForge</option>
+                </select>
+            </div>
 
-            {{-- SEARCH FORM --}}
-            <form method="GET" id="searchForm" class="flex flex-wrap gap-2 mb-5">
-                <input
-                    type="text"
-                    id="inputSearch"
-                    name="query"
-                    placeholder="Mod name"
-                    value="{{ $query }}"
-                    class="flex-1 min-w-40 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm px-3 py-2 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
+            <div class="flex-1 min-w-48">
+                <label for="inputSearch" class="ui-label" x-text="source === 'loader' ? 'Minecraft version' : 'Search'">Search</label>
+                <input type="text" id="inputSearch" name="query" value="{{ $query }}"
+                       :placeholder="source === 'loader' ? 'e.g. 1.20.1 or 26.1' : 'Mod name'"
+                       class="ui-control">
+            </div>
 
-                <input
-                    type="text"
-                    id="inputGameVersion"
-                    name="game_version"
-                    placeholder="Minecraft version"
-                    value="{{ $gameVersion }}"
-                    class="w-44 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm px-3 py-2 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
+            <div class="w-[calc(50%-0.375rem)] sm:w-36" x-show="source !== 'loader'">
+                <label for="inputGameVersion" class="ui-label">Minecraft</label>
+                <input type="text" id="inputGameVersion" name="game_version" value="{{ $gameVersion }}" placeholder="Any" class="ui-control"
+                       :disabled="source === 'loader'">
+            </div>
 
-                <select
-                    id="inputLoader"
-                    name="loader"
-                    class="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm px-3 py-2 text-gray-900 dark:text-gray-100"
-                >
-                    @foreach (['' => 'Any Loader', 'fabric' => 'Fabric', 'quilt' => 'Quilt', 'forge' => 'Forge', 'neoforge' => 'NeoForge'] as $value => $label)
-                        <option value="{{ $value }}" {{ $loader === $value ? 'selected' : '' }}>{{ $label }}</option>
+            <div class="w-[calc(50%-0.375rem)] sm:w-36" x-show="source !== 'loader'">
+                <label for="inputLoader" class="ui-label">Mod loader</label>
+                <select id="inputLoader" name="loader" class="ui-control" :disabled="source === 'loader'">
+                    @foreach (['' => 'Any', 'fabric' => 'Fabric', 'quilt' => 'Quilt', 'forge' => 'Forge', 'neoforge' => 'NeoForge'] as $value => $label)
+                        <option value="{{ $value }}" @selected($loader === $value)>{{ $label }}</option>
                     @endforeach
                 </select>
+            </div>
 
-                <select
-                    id="inputReleaseType"
-                    name="release_type"
-                    class="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm px-3 py-2 text-gray-900 dark:text-gray-100"
-                >
+            <div class="w-[calc(50%-0.375rem)] sm:w-32">
+                <label for="inputReleaseType" class="ui-label">Channel</label>
+                <select id="inputReleaseType" name="release_type" class="ui-control">
                     @foreach (['release' => 'Release', 'beta' => 'Beta', 'alpha' => 'Alpha', 'any' => 'Any'] as $value => $label)
-                        <option value="{{ $value }}" {{ $releaseType === $value ? 'selected' : '' }}>{{ $label }}</option>
+                        <option value="{{ $value }}" @selected($releaseType === $value)>{{ $label }}</option>
                     @endforeach
                 </select>
+            </div>
 
-                <select
-                    id="inputProvider"
-                    name="provider"
-                    class="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm px-3 py-2 text-gray-900 dark:text-gray-100"
-                >
-                    @foreach ($providers as $providerKey => $tmpProvider)
-                        <option value="{{ $providerKey }}" {{ $provider == $providerKey ? 'selected' : '' }}>
-                            {{ $tmpProvider::name() }}
-                        </option>
-                    @endforeach
-                </select>
+            <button type="submit" class="ui-btn ui-btn-primary">
+                <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/></svg>
+                Search
+            </button>
+        </div>
+    </form>
 
-                <button
-                    type="submit"
-                    class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-                >
-                    Search
-                </button>
-            </form>
+    {{-- Results --}}
+    <form method="POST" action="{{ route('mod.import_batch') }}"
+          x-data="{ selected: [], submitting: false }" @submit="submitting = true">
+        @csrf
+        <input type="hidden" name="provider" value="{{ $provider }}">
+        <input type="hidden" name="game_version" value="{{ $isLoaderProvider ? '' : $gameVersion }}">
+        <input type="hidden" name="release_type" value="{{ $releaseType }}">
+        <input type="hidden" name="loader" value="{{ $isLoaderProvider ? '' : $loader }}">
 
-            {{-- BATCH IMPORT FORM wraps the results table --}}
-            <form method="POST" action="{{ route('mod.import_batch') }}">
-                @csrf
-                <input type="hidden" name="provider" value="{{ $provider }}">
-                <input type="hidden" name="game_version" value="{{ $gameVersion }}">
-                <input type="hidden" name="release_type" value="{{ $releaseType }}">
-                <input type="hidden" name="loader" value="{{ $loader }}">
+        <section class="ui-card overflow-hidden">
+            <div class="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-gray-200 dark:border-gray-800">
+                <h2 class="section-title">
+                    {{ number_format($pagination->totalItems) }} {{ Str::plural('result', $pagination->totalItems) }}
+                </h2>
+                <div class="flex items-center gap-3" x-show="selected.length" x-cloak>
+                    <span class="text-xs text-gray-500">
+                        Imports the newest {{ $releaseType !== 'any' ? $releaseType : '' }}
+                        version{{ ! $isLoaderProvider && $gameVersion !== '' ? ' for '.$gameVersion : '' }}
+                    </span>
+                    <button type="submit" class="ui-btn ui-btn-sm ui-btn-primary-solid" :disabled="submitting">
+                        <span x-text="submitting ? 'Importing…' : 'Import ' + selected.length + ' selected'"></span>
+                    </button>
+                </div>
+            </div>
 
+            @if (empty($mods))
+                <p class="px-5 py-14 text-center text-sm text-gray-500">
+                    No results. Try a different search or source.
+                </p>
+            @else
                 <div class="overflow-x-auto">
-                    <table class="w-full text-sm border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
-                        <thead class="bg-gray-50 dark:bg-gray-800">
-                            <tr>
-                                <th class="px-4 py-2 text-center w-8">
-                                    <input
-                                        type="checkbox"
-                                        id="selectAll"
-                                        class="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
-                                        title="Select all"
-                                    >
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="ui-table-head">
+                                <th class="pl-5 pr-2 py-3 w-8">
+                                    <input type="checkbox" class="ui-checkbox" aria-label="Select all"
+                                           @change="selected = $event.target.checked ? @js(collect($mods)->pluck('id')->map(fn ($id) => (string) $id)->values()) : []"
+                                           :checked="selected.length === {{ count($mods) }}">
                                 </th>
-                                <th class="px-4 py-2 text-left">#</th>
-                                <th class="px-4 py-2 text-left">Mod Name</th>
-                                <th class="px-4 py-2 text-left">Author</th>
-                                <th class="px-4 py-2 text-left">Website</th>
-                                <th class="px-4 py-2 text-left">Actions</th>
+                                <th class="px-3 py-3">{{ $isLoaderProvider ? 'Loader' : 'Mod' }}</th>
+                                <th class="px-3 py-3 hidden md:table-cell">Author</th>
+                                <th class="px-5 py-3"><span class="sr-only">Actions</span></th>
                             </tr>
                         </thead>
-
-                        <tbody class="divide-y divide-gray-200 dark:divide-gray-800">
+                        <tbody class="ui-table-body">
                             @foreach ($mods as $mod)
-                                <tr>
-                                    <td class="px-4 py-2 text-center">
-                                        <input
-                                            type="checkbox"
-                                            name="mods[]"
-                                            value="{{ $mod->id }}"
-                                            class="mod-checkbox rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
-                                        >
+                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-900/50">
+                                    <td class="pl-5 pr-2 py-3">
+                                        <input type="checkbox" name="mods[]" value="{{ $mod->id }}" x-model="selected" class="ui-checkbox"
+                                               aria-label="Select {{ $mod->displayName ?? $mod->name }}">
                                     </td>
-
-                                    <td class="px-4 py-2">
-                                        @if (!empty($mod->thumbnailUrl))
-                                            <img src="{{ $mod->thumbnailUrl }}" alt="{{ $mod->thumbnailDesc }}" class="h-8 w-8 object-contain">
+                                    <td class="px-3 py-3">
+                                        <div class="flex items-center gap-3 min-w-0">
+                                            @if (! empty($mod->thumbnailUrl))
+                                                <img src="{{ $mod->thumbnailUrl }}" alt="" class="size-9 shrink-0 rounded-lg border border-gray-200 dark:border-gray-800 object-contain bg-white dark:bg-gray-900" loading="lazy">
+                                            @else
+                                                <span class="size-9 shrink-0 rounded-lg border border-gray-200 dark:border-gray-800"></span>
+                                            @endif
+                                            <div class="min-w-0">
+                                                <p class="font-medium text-gray-950 dark:text-white truncate">{{ $mod->displayName ?? $mod->name }}</p>
+                                                <p class="text-xs text-gray-500 line-clamp-1 max-w-xl">{{ $mod->displaySummary ?? $mod->summary }}</p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="px-3 py-3 text-gray-600 dark:text-gray-400 hidden md:table-cell whitespace-nowrap">
+                                        @if (! empty($mod->websiteUrl))
+                                            <a href="{{ $mod->websiteUrl }}" target="_blank" rel="noopener noreferrer" class="hover:text-gray-950 dark:hover:text-white">{{ $mod->authors }} ↗</a>
+                                        @else
+                                            {{ $mod->authors }}
                                         @endif
                                     </td>
-
-                                    <td class="px-4 py-2">
-                                        <p class="font-semibold text-gray-900 dark:text-gray-100">
-                                            {{ property_exists($mod, 'displayName') ? $mod->displayName : $mod->name }}
-                                        </p>
-                                        <p class="text-gray-600 dark:text-gray-400 text-xs">
-                                            {{ property_exists($mod, 'displaySummary') ? $mod->displaySummary : $mod->summary }}
-                                        </p>
-                                    </td>
-
-                                    <td class="px-4 py-2 text-gray-700 dark:text-gray-300">
-                                        {{ $mod->authors }}
-                                    </td>
-
-                                    <td class="px-4 py-2">
-                                        <a href="{{ $mod->websiteUrl }}" target="_blank"
-                                           class="text-blue-600 hover:underline text-xs break-all">
-                                            {{ $mod->websiteUrl }}
-                                        </a>
-                                    </td>
-
-                                    <td class="px-4 py-2 whitespace-nowrap">
-                                        <a href="{{ url('mod/import/details/'.$provider.'/'.$mod->id) }}"
-                                           class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 text-xs font-medium px-3 py-1.5 rounded-md">
-                                            Choose Versions
-                                        </a>
+                                    <td class="px-5 py-3 text-right">
+                                        <a href="{{ url('mod/import/details/'.$provider.'/'.$mod->id) }}{{ $detailsQuery ? '?'.$detailsQuery : '' }}"
+                                           class="ui-btn ui-btn-sm ui-btn-secondary">Choose versions</a>
                                     </td>
                                 </tr>
                             @endforeach
@@ -168,76 +179,20 @@
                     </table>
                 </div>
 
-                @if (!empty($mods))
-                    <div class="flex items-center gap-3 mt-4">
-                        <button
-                            type="submit"
-                            id="importSelectedBtn"
-                            class="bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:pointer-events-none"
-                        >
-                            Import Selected
-                        </button>
-                        <span class="text-xs text-gray-500 dark:text-gray-400">
-                            Imports the latest
-                            {{ $releaseType !== 'any' ? $releaseType : '' }}
-                            @if (!empty($gameVersion))
-                                {{ $gameVersion }}
-                            @endif
-                            version for each selected mod
-                        </span>
+                @if ($pagination->totalPages > 1)
+                    <div class="flex items-center justify-between gap-3 px-5 py-3 border-t border-gray-200 dark:border-gray-800 text-sm text-gray-500">
+                        <span>Page {{ number_format($pagination->currentPage) }} of {{ number_format($pagination->totalPages) }}</span>
+                        <div class="flex items-center gap-1">
+                            <a href="{{ $baseUrl.'&page='.($pagination->currentPage - 1) }}" @class(['ui-page-btn', 'pointer-events-none opacity-40' => $pagination->currentPage <= 1]) aria-label="Previous page">
+                                <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5"/></svg>
+                            </a>
+                            <a href="{{ $baseUrl.'&page='.($pagination->currentPage + 1) }}" @class(['ui-page-btn', 'pointer-events-none opacity-40' => $pagination->currentPage >= $pagination->totalPages]) aria-label="Next page">
+                                <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5"/></svg>
+                            </a>
+                        </div>
                     </div>
                 @endif
-            </form>
-
-            @php
-                $baseUrl = url('mod/import') . '?' . http_build_query(array_filter(['provider' => $provider, 'query' => $query, 'game_version' => $gameVersion, 'release_type' => $releaseType, 'loader' => $loader]));
-            @endphp
-
-            <div class="flex items-center justify-center gap-3 mt-6 text-sm">
-                <a
-                    class="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 {{ $pagination->currentPage <= 1 ? 'opacity-50 pointer-events-none' : '' }}"
-                    href="{{ $pagination->currentPage <= 1 ? '#' : $baseUrl . '&page=' . ($pagination->currentPage - 1) }}"
-                >
-                    ←
-                </a>
-
-                <span class="text-gray-700 dark:text-gray-300">
-                    Page {{ number_format($pagination->currentPage) }}
-                    of {{ number_format($pagination->totalPages) }}
-                    ({{ number_format($pagination->totalItems) }})
-                </span>
-
-                <a
-                    class="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 {{ $pagination->currentPage >= $pagination->totalPages ? 'opacity-50 pointer-events-none' : '' }}"
-                    href="{{ $pagination->currentPage >= $pagination->totalPages ? '#' : $baseUrl . '&page=' . ($pagination->currentPage + 1) }}"
-                >
-                    →
-                </a>
-            </div>
-        </div>
-    </div>
+            @endif
+        </section>
+    </form>
 @endsection
-
-@push('scripts')
-<script>
-(function () {
-    const selectAll = document.getElementById('selectAll');
-    const checkboxes = document.querySelectorAll('.mod-checkbox');
-
-    if (selectAll) {
-        selectAll.addEventListener('change', function () {
-            checkboxes.forEach(function (cb) {
-                cb.checked = selectAll.checked;
-            });
-        });
-
-        checkboxes.forEach(function (cb) {
-            cb.addEventListener('change', function () {
-                selectAll.checked = Array.from(checkboxes).every(function (c) { return c.checked; });
-                selectAll.indeterminate = !selectAll.checked && Array.from(checkboxes).some(function (c) { return c.checked; });
-            });
-        });
-    }
-})();
-</script>
-@endpush

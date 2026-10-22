@@ -21,7 +21,7 @@ Requirements
 
 * PHP 8.4 or higher
 * [Composer](https://getcomposer.org/)
-* [Node.js](https://nodejs.org/) 20 or higher and npm
+* [Node.js](https://nodejs.org/) 20 or higher and [pnpm](https://pnpm.io/installation)
 * `unzip` package
 * Ctype PHP Extension
 * cURL PHP Extension

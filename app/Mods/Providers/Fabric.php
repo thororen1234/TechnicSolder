@@ -5,21 +5,26 @@ namespace App\Mods\Providers;
 use App\Mods\ImportedModData;
 use App\Mods\ModProvider;
 
+/**
+ * Fabric Loader, packaged for Technic as bin/version.json (the launcher profile from Fabric Meta).
+ *
+ * Each Minecraft version is a search result; its versions are the loader builds for that game version.
+ */
 class Fabric extends ModProvider
 {
     public static function name(): string
     {
-        return "Fabric";
+        return 'Fabric';
     }
 
     protected static function apiUrl(): string
     {
-        return "https://meta.fabricmc.net";
+        return 'https://meta.fabricmc.net/v2';
     }
 
     protected static function zipFolder(): string
     {
-        return "bin";
+        return 'bin';
     }
 
     protected static function useRawVersion(): bool
@@ -27,25 +32,48 @@ class Fabric extends ModProvider
         return true;
     }
 
+    protected static function slug(): string
+    {
+        return 'fabric-loader';
+    }
+
+    protected static function authors(): string
+    {
+        return 'FabricMC';
+    }
+
+    protected static function websiteUrl(): string
+    {
+        return 'https://fabricmc.net/';
+    }
+
+    protected static function thumbnailUrl(): string
+    {
+        return 'https://fabricmc.net/assets/logo.png';
+    }
+
+    /**
+     * Whether a loader build is a stable release.
+     */
+    protected static function isStable(object $loader): bool
+    {
+        return (bool) ($loader->stable ?? true);
+    }
+
     public static function search(string $query, int $page = 1, string $gameVersion = '', string $loader = ''): object
     {
         $mods = [];
-        $data = static::request("/v2/versions/game") ?? [];
 
-        foreach ($data as $mod) {
-            if (empty($mod->stable)) {
+        foreach (static::request('/versions/game') ?? [] as $game) {
+            $version = $game->version ?? '';
+
+            if (empty($game->stable)
+                || ($query !== '' && stripos($version, $query) === false)
+                || ($gameVersion !== '' && stripos($version, $gameVersion) === false)) {
                 continue;
             }
 
-            if (!empty($query) && stripos($mod->version ?? '', $query) === false) {
-                continue;
-            }
-
-            if (!empty($gameVersion) && stripos($mod->version ?? '', $gameVersion) === false) {
-                continue;
-            }
-
-            $mods[] = static::generateModData($mod);
+            $mods[] = self::generateModData($version);
         }
 
         return (object) [
@@ -53,72 +81,56 @@ class Fabric extends ModProvider
             'pagination' => (object) [
                 'currentPage' => 1,
                 'totalPages' => 1,
-                'totalItems' => count($mods)
-            ]
+                'totalItems' => count($mods),
+            ],
         ];
     }
 
+    /**
+     * @param  string  $modId  Minecraft version, e.g. "1.20.1" or "26.1"
+     */
     public static function mod(string $modId): ?ImportedModData
     {
-        $data = static::request("/v2/versions/game") ?? [];
-
-        $foundMod = null;
-
-        foreach ($data as $mod) {
-            if (isset($mod->version) && $mod->version === $modId) {
-                $foundMod = $mod;
-                break;
-            }
-        }
-
-        if (!$foundMod) {
+        $games = collect(static::request('/versions/game') ?? []);
+        if (! $games->contains(fn ($game) => ($game->version ?? null) === $modId)) {
             return null;
         }
 
-        $foundMod->versions = static::request("/v2/versions/loader") ?? [];
+        $modData = self::generateModData($modId);
 
-        return static::generateModData($foundMod);
+        foreach (static::request('/versions/loader') ?? [] as $loader) {
+            $loaderVersion = $loader->version ?? null;
+            if (! $loaderVersion) {
+                continue;
+            }
+
+            $modData->versions["$modId-$loaderVersion"] = (object) [
+                'url' => static::apiUrl()."/versions/loader/$modId/$loaderVersion/profile/json",
+                'filename' => 'version.json',
+                'label' => $loaderVersion,
+                'gameVersions' => [$modId],
+                'versionType' => static::isStable($loader) ? 'release' : 'beta',
+            ];
+        }
+
+        return $modData;
     }
 
-    private static function generateModData($mod): ImportedModData
+    private static function generateModData(string $gameVersion): ImportedModData
     {
-        $modData = new ImportedModData();
+        $modData = new ImportedModData;
 
-        $version = $mod->version ?? 'unknown';
-
-        $modData->id = $version;
-        $modData->slug = "fabric-loader";
-
-        $modData->name = "Fabric Loader";
-        $modData->summary = "Fabric Loader for Minecraft";
-
-        $modData->displayName = "Fabric Loader {$version}";
-        $modData->displaySummary = "Fabric Loader for Minecraft {$version}";
-
-        $modData->authors = "FabricMC";
-
-        $modData->thumbnailUrl = "https://fabricmc.net/assets/logo.png";
-        $modData->thumbnailDesc = "FabricMC";
-        $modData->websiteUrl = "https://fabricmc.net/";
-
+        $modData->id = $gameVersion;
+        $modData->slug = static::slug();
+        $modData->name = static::name().' Loader';
+        $modData->summary = static::name().' Loader for Minecraft';
+        $modData->displayName = static::name()." Loader $gameVersion";
+        $modData->displaySummary = static::name()." Loader for Minecraft $gameVersion";
+        $modData->authors = static::authors();
+        $modData->thumbnailUrl = static::thumbnailUrl();
+        $modData->thumbnailDesc = static::authors();
+        $modData->websiteUrl = static::websiteUrl();
         $modData->versions = [];
-
-        if (!empty($mod->versions) && is_iterable($mod->versions)) {
-            foreach ($mod->versions as $versionObj) {
-
-                $ver = $versionObj->version ?? 'unknown';
-                $game = $mod->version ?? 'unknown';
-
-                $key = "{$game}-{$ver}";
-
-                $modData->versions[$key] = (object) [
-                    "url"          => static::apiUrl()
-                        . "/v2/versions/loader/{$game}/{$ver}/profile/json",
-                    "filename"     => "version.json",
-                    "gameVersions" => [$game],
-                ];
-            }
-        }
 
         return $modData;
     }

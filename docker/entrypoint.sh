@@ -23,7 +23,7 @@ php artisan solder:setup --no-interaction
 # Warn if frontend assets are missing (e.g. volume-mounted source without a prior build)
 if [ ! -d public/build ]; then
     echo "WARNING: public/build/ is missing — frontend assets have not been built."
-    echo "Run 'npm ci && npm run build' on the host or inside a Node container."
+    echo "Run 'pnpm install --frozen-lockfile && pnpm run build' on the host or inside a Node container."
 fi
 
 # Ensure the web server can write to storage and cache

@@ -16,7 +16,7 @@ This guide walks through installing Technic Solder directly on a Linux server.
 - **Git**
 - **PHP >= 8.4**
 - **Composer** ([getcomposer.org](https://getcomposer.org/))
-- **Node.js >= 20** and **npm** ([nodejs.org](https://nodejs.org/))
+- **Node.js >= 20** and **pnpm** ([pnpm.io](https://pnpm.io/installation))
 - **unzip**
 - **A MariaDB, MySQL, or PostgreSQL database**
 
@@ -60,8 +60,8 @@ Clone the repository and install dependencies:
 git clone https://github.com/TechnicPack/TechnicSolder.git
 cd TechnicSolder
 composer install --no-dev --no-interaction
-npm ci
-npm run build
+pnpm install --frozen-lockfile
+pnpm run build
 ```
 
 !!! note
@@ -185,7 +185,7 @@ php artisan optimize
 Solder's dependencies are frequently updated. Set up a cron job (or similar) to keep them current:
 
 ```bash
-cd /path/to/TechnicSolder && composer update --no-dev --no-interaction && npm ci && npm run build && php artisan optimize
+cd /path/to/TechnicSolder && composer update --no-dev --no-interaction && pnpm install --frozen-lockfile && pnpm run build && php artisan optimize
 ```
 
 !!! tip
