@@ -149,6 +149,9 @@
             </span>
             <span class="flex items-center gap-3 text-xs text-gray-500">
                 <span class="hidden sm:inline">Not included in any build</span>
+                @if ($unusedModversions->isNotEmpty())
+                    <a href="{{ route('mod.unused') }}" class="text-gray-950 dark:text-white hover:underline" @click.stop>Clean up →</a>
+                @endif
                 <svg class="size-4 transition-transform" :class="open && 'rotate-180'" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>
             </span>
         </button>

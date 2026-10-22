@@ -6,6 +6,7 @@ use App\Libraries\UrlUtils;
 use App\Models\Mod;
 use App\Models\Modversion;
 use App\Mods\ModProviders;
+use App\Services\ModRepository;
 use App\Services\ModUploadService;
 use Exception;
 use Illuminate\Http\JsonResponse;
@@ -295,6 +296,70 @@ class ModController extends Controller
         }
 
         return empty($errors) ? $redirect : $redirect->withErrors($errors);
+    }
+
+    /**
+     * Mod versions that no build uses, for cleaning up.
+     */
+    public function getUnused(): View
+    {
+        $this->authorize('delete', Modversion::class);
+
+        $modversions = Modversion::with('mod')
+            ->doesntHave('builds')
+            ->get()
+            ->sortBy(fn (Modversion $modversion) => [strtolower($modversion->mod->pretty_name ?: $modversion->mod->name), $modversion->id])
+            ->values();
+
+        return view('mod.unused', [
+            'modversions' => $modversions,
+            'isRemote' => ModRepository::isRemote(),
+        ]);
+    }
+
+    /**
+     * Delete unused mod versions (the selected ones, or all of them) and optionally their files.
+     */
+    public function postUnused(): RedirectResponse
+    {
+        $this->authorize('delete', Modversion::class);
+
+        $query = Modversion::with('mod')->doesntHave('builds');
+        if (! Request::boolean('all')) {
+            $query->whereIn('id', (array) Request::input('modversions', []));
+        }
+
+        $deleteFiles = Request::boolean('delete_files') && ! ModRepository::isRemote();
+        $deleted = 0;
+        $freed = 0;
+
+        // Re-checked here: a version added to a build since the page loaded is left alone
+        foreach ($query->get() as $modversion) {
+            if ($deleteFiles) {
+                $path = ModRepository::location($modversion);
+                if (is_file($path)) {
+                    $freed += filesize($path);
+                    unlink($path);
+                }
+                if (is_dir(dirname($path)) && count(scandir(dirname($path))) === 2) {
+                    rmdir(dirname($path));
+                }
+            }
+
+            $modversion->delete();
+            $deleted++;
+        }
+
+        if ($deleted === 0) {
+            return redirect('mod/unused')->withErrors(['Select at least one unused version to delete.']);
+        }
+
+        Cache::forget('mods');
+
+        $message = "Deleted $deleted unused mod ".Str::plural('version', $deleted);
+        $message .= $deleteFiles ? ' and freed '.Modversion::formatFilesize($freed).'.' : '. Their files were kept in the repository.';
+
+        return redirect('mod/unused')->with('success', $message);
     }
 
     /**

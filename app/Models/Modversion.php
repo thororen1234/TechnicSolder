@@ -80,8 +80,14 @@ class Modversion extends Model
 
     public function humanFilesize(): string
     {
-        $size = $this->filesize;
+        return self::formatFilesize((int) $this->filesize);
+    }
 
+    /**
+     * A byte count as "1.50 MiB", without needing the intl extension.
+     */
+    public static function formatFilesize(int $size): string
+    {
         if ($size >= (1 << 30)) {
             return number_format($size / (1 << 30), 2).' GiB';
         }

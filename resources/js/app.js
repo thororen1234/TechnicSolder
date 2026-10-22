@@ -180,6 +180,7 @@ const NAV_SECTIONS = [
             { label: 'All mods', url: '/mod/list' },
             { label: 'New mod', url: '/mod/create' },
             { label: 'Import mod', url: '/mod/import' },
+            { label: 'Unused mod versions', url: '/mod/unused' },
         ],
     },
     {

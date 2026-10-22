@@ -190,6 +190,7 @@
                 <a href="{{ url('mod/list') }}" class="subnav-link" :aria-current="isCurrent(['/mod/list', '/mod/view', '/mod/delete']) ? 'page' : null">All mods</a>
                 <a href="{{ url('mod/create') }}" class="subnav-link" :aria-current="isCurrent(['/mod/create']) ? 'page' : null">New mod</a>
                 <a href="{{ url('mod/import') }}" class="subnav-link" :aria-current="isCurrent(['/mod/import']) ? 'page' : null">Import</a>
+                <a href="{{ url('mod/unused') }}" class="subnav-link" :aria-current="isCurrent(['/mod/unused']) ? 'page' : null">Unused</a>
             </nav>
             <nav data-subnav="settings" class="subnav" aria-label="Settings">
                 <a href="{{ url('solder/configure') }}" class="subnav-link" :aria-current="isCurrent(['/solder/configure']) ? 'page' : null">Configuration</a>
