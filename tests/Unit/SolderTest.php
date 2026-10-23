@@ -54,4 +54,29 @@ final class SolderTest extends TestCase
         $response->assertOk();
         $response->assertSee('Update Manager');
     }
+
+    public function test_update_page_with_commit_not_linked_to_github_user(): void
+    {
+        Cache::put('update:github:changelog:main', [
+            [
+                'sha' => 'def456',
+                'html_url' => 'https://example.com',
+                'commit' => [
+                    'message' => 'unlinked commit',
+                    'author' => ['date' => '2025-01-01T00:00:00Z', 'name' => 'Unlinked Author'],
+                ],
+                'author' => null,
+                'committer' => null,
+            ],
+        ], now()->addHour());
+
+        Cache::put('update:github:tags', [
+            ['name' => '0.0.1'],
+        ], now()->addHour());
+
+        $response = $this->get('/solder/update');
+
+        $response->assertOk();
+        $response->assertSee('unlinked commit');
+    }
 }

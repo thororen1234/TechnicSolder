@@ -118,9 +118,13 @@
                         @foreach ($changelog as $change)
                             <a href="{{ $change['html_url'] }}" target="_blank"
                                class="flex items-start gap-3 py-3 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 -mx-2 px-2 rounded transition-colors">
-                                <img src="{{ $change['author']['avatar_url'] ?? $change['committer']['avatar_url'] }}"
-                                     alt="{{ $change['author']['login'] ?? $change['commit']['author']['name'] ?? $change['committer']['login'] }}"
-                                     class="size-6 rounded-full shrink-0 mt-0.5">
+                                @if ($avatarUrl = $change['author']['avatar_url'] ?? $change['committer']['avatar_url'] ?? null)
+                                    <img src="{{ $avatarUrl }}"
+                                         alt="{{ $change['author']['login'] ?? $change['commit']['author']['name'] ?? $change['committer']['login'] ?? '' }}"
+                                         class="size-6 rounded-full shrink-0 mt-0.5">
+                                @else
+                                    <div class="size-6 rounded-full shrink-0 mt-0.5 bg-gray-200 dark:bg-gray-700"></div>
+                                @endif
                                 <div class="flex-1 min-w-0">
                                     <p class="truncate">{{ $change['commit']['message'] }}</p>
                                     <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
