@@ -1,5 +1,4 @@
 import { tmpdir } from 'node:os'
-import { RedisStore } from 'connect-redis'
 import type { NextFunction, Request, RequestHandler, Response } from 'express'
 import session from 'express-session'
 import multer from 'multer'
@@ -11,6 +10,7 @@ import { random } from '../support/str.js'
 import { runWithContext, setCurrentUserId } from './context.js'
 import { TokenMismatchError } from './errors.js'
 import { hit } from './rate-limit.js'
+import { RedisSessionStore } from './session-store.js'
 import { UploadedFile } from './uploaded-file.js'
 
 /** Security headers on every response */
@@ -100,7 +100,7 @@ export function sessionMiddleware(): RequestHandler {
         resave: false,
         saveUninitialized: false,
         rolling: true,
-        store: config.session.driver === 'redis' ? new RedisStore({ client: redis(), prefix: 'solder_session:' }) : undefined,
+        store: config.session.driver === 'redis' ? new RedisSessionStore(redis()) : undefined,
         cookie: {
             httpOnly: true,
             sameSite: 'lax',
