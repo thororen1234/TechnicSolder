@@ -21,6 +21,9 @@ function engine(): Eta {
         autoTrim: false,
         cache: isProduction(),
         defaultExtension: '.eta',
+        // Like Blade, null and undefined print nothing instead of "null"
+        autoFilter: true,
+        filterFunction: (value: unknown) => (value === null || value === undefined ? '' : String(value)),
     })
     return eta
 }

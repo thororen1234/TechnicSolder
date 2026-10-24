@@ -88,6 +88,21 @@ describe('Signing in', () => {
         expect((await admin()).remember_token).not.toBe('')
     })
 
+    it('leaves the email field empty on a fresh login page', async () => {
+        const response = await agent().get('/login')
+
+        expect(response.status).toBe(200)
+        expect(response.text).toMatch(/name="email" id="email" value=""/)
+        expect(response.text).not.toContain('value="null"')
+    })
+
+    it('refills the email field after a failed sign-in', async () => {
+        const browser = agent()
+        await browser.post('/login', { email: 'admin@example.com', password: 'wrong' })
+
+        expect((await browser.get('/login')).text).toMatch(/name="email" id="email" value="admin@example.com"/)
+    })
+
     it('sends signed-in users from the login page to the dashboard', async () => {
         expect(redirectPath(await actingAs(await admin()).get('/login'))).toBe('/dashboard')
     })
