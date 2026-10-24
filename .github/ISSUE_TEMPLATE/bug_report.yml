@@ -26,17 +26,10 @@ body:
     validations:
       required: true
   - type: input
-    id: php-version
+    id: node-version
     attributes:
-      label: PHP version
-      description: "Run `php -v`"
-    validations:
-      required: true
-  - type: input
-    id: composer-version
-    attributes:
-      label: Composer version
-      description: "Run `composer -v`"
+      label: Node.js version
+      description: "Run `node -v` (or say Docker if you use the Docker image)"
     validations:
       required: true
   - type: input

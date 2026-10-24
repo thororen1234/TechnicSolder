@@ -1,0 +1,261 @@
+// Mirrors the tables created by the migrations in database/migrations. The schema is owned by those migrations
+// (run with `pnpm solder migrate`), not by Prisma Migrate, so existing installs keep working unchanged.
+//
+// Relations are deliberately not declared: the tables have no foreign keys, older installs can hold dangling
+// references, and history tables keep IDs of deleted rows. Related rows are loaded explicitly in src/database.
+//
+// scripts/prisma-generate.mjs writes a copy of this file per database provider and generates a client for each.
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma/postgresql"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Modpack {
+  id             Int       @id @default(autoincrement())
+  name           String    @unique
+  slug           String    @unique
+  recommended    String?
+  latest         String?
+  url            String?
+  icon_md5       String?
+  logo_md5       String?
+  background_md5 String?
+  created_at     DateTime?
+  updated_at     DateTime?
+  order          Int       @default(0)
+  hidden         Boolean   @default(true)
+  private        Boolean   @default(false)
+  icon           Boolean   @default(false)
+  logo           Boolean   @default(false)
+  background     Boolean   @default(false)
+  icon_url       String?
+  logo_url       String?
+  background_url String?
+
+  @@map("modpacks")
+}
+
+model Build {
+  id           Int       @id @default(autoincrement())
+  modpack_id   Int
+  version      String
+  created_at   DateTime?
+  updated_at   DateTime?
+  minecraft    String    @default("")
+  forge        String?
+  is_published Boolean   @default(false)
+  private      Boolean   @default(false)
+  min_java     String?
+  min_memory   Int?
+  java_runtime String?
+
+  @@index([modpack_id])
+  @@map("builds")
+}
+
+model Mod {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  description String?
+  author      String?
+  link        String?
+  notes       String?
+  created_at  DateTime?
+  updated_at  DateTime?
+  pretty_name String    @default("")
+
+  @@map("mods")
+}
+
+model Modversion {
+  id                  Int       @id @default(autoincrement())
+  mod_id              Int
+  version             String
+  md5                 String
+  created_at          DateTime?
+  updated_at          DateTime?
+  filesize            Int?
+  notes               String?
+  provider            String?
+  provider_project_id String?
+  provider_version_id String?
+  environment         String?
+
+  @@index([mod_id])
+  @@index([provider, provider_project_id])
+  @@map("modversions")
+}
+
+model BuildModversion {
+  id            Int       @id @default(autoincrement())
+  modversion_id Int
+  build_id      Int
+  created_at    DateTime?
+  updated_at    DateTime?
+
+  @@index([modversion_id])
+  @@index([build_id])
+  @@map("build_modversion")
+}
+
+model User {
+  id                        Int       @id @default(autoincrement())
+  username                  String
+  email                     String
+  password                  String
+  two_factor_secret         String?
+  two_factor_recovery_codes String?
+  two_factor_confirmed_at   DateTime?
+  created_ip                String
+  last_ip                   String?
+  created_at                DateTime?
+  updated_at                DateTime?
+  remember_token            String    @default("")
+  updated_by_ip             String?
+  created_by_user_id        Int       @default(1)
+  updated_by_user_id        Int?
+
+  @@map("users")
+}
+
+model UserPermission {
+  id              Int       @id @default(autoincrement())
+  user_id         Int
+  solder_full     Boolean   @default(false)
+  solder_users    Boolean   @default(false)
+  mods_create     Boolean   @default(false)
+  mods_manage     Boolean   @default(false)
+  mods_delete     Boolean   @default(false)
+  modpacks        String?
+  created_at      DateTime?
+  updated_at      DateTime?
+  solder_keys     Boolean   @default(false)
+  solder_clients  Boolean   @default(false)
+  modpacks_create Boolean   @default(false)
+  modpacks_manage Boolean   @default(false)
+  modpacks_delete Boolean   @default(false)
+
+  @@index([user_id])
+  @@map("user_permissions")
+}
+
+model Client {
+  id         Int       @id @default(autoincrement())
+  name       String
+  uuid       String
+  created_at DateTime?
+  updated_at DateTime?
+
+  @@index([uuid])
+  @@map("clients")
+}
+
+model ClientModpack {
+  id         Int       @id @default(autoincrement())
+  client_id  Int
+  modpack_id Int
+  created_at DateTime?
+  updated_at DateTime?
+
+  @@index([client_id])
+  @@index([modpack_id])
+  @@map("client_modpack")
+}
+
+model Key {
+  id         Int       @id @default(autoincrement())
+  name       String
+  api_key    String
+  created_at DateTime?
+  updated_at DateTime?
+
+  @@index([api_key])
+  @@map("keys")
+}
+
+model PersonalAccessToken {
+  id             Int       @id @default(autoincrement())
+  tokenable_type String
+  tokenable_id   Int
+  name           String
+  token          String    @unique
+  abilities      String?
+  last_used_at   DateTime?
+  expires_at     DateTime?
+  created_at     DateTime?
+  updated_at     DateTime?
+
+  @@index([tokenable_type, tokenable_id])
+  @@map("personal_access_tokens")
+}
+
+model PasswordResetToken {
+  email      String    @id
+  token      String
+  created_at DateTime?
+
+  @@map("password_reset_tokens")
+}
+
+/// A record of a change to a modpack or build. IDs are not foreign keys: history outlives what it describes.
+model ActivityLog {
+  id          Int       @id @default(autoincrement())
+  user_id     Int?
+  modpack_id  Int?
+  build_id    Int?
+  action      String
+  description String
+  /// JSON, stored as text so every database driver reads it the same way
+  properties  String?
+  created_at  DateTime?
+
+  @@index([modpack_id, created_at])
+  @@index([build_id, created_at])
+  @@index([created_at])
+  @@map("activity_logs")
+}
+
+/// Launcher requests for a build per day. Written with raw SQL (see BuildDownloads) for the atomic upsert.
+model BuildDownload {
+  id       Int      @id @default(autoincrement())
+  build_id Int
+  date     DateTime
+  count    Int      @default(0)
+
+  @@unique([build_id, date])
+  @@index([date])
+  @@map("build_downloads")
+}
+
+model ModpackImport {
+  id            Int       @id @default(autoincrement())
+  user_id       Int?
+  modpack_id    Int?
+  build_id      Int?
+  name          String
+  slug          String?
+  source        String
+  archive_path  String?
+  build_version String?
+  overwrite     Boolean   @default(false)
+  status        String
+  imported      Int       @default(0)
+  skipped       Int       @default(0)
+  /// JSON list of strings
+  problems      String?
+  /// JSON list of {time, level, message}
+  log           String?
+  created_at    DateTime?
+  updated_at    DateTime?
+
+  @@index([modpack_id, created_at])
+  @@index([created_at])
+  @@map("modpack_imports")
+}

@@ -1,8 +1,8 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/forms";
 
-@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
-@source '../../storage/framework/views/*.php';
+@source '../views/**/*.eta';
+@source '../../src/views/paginator.ts';
 
 @custom-variant dark (&:where(.dark, .dark *));
 

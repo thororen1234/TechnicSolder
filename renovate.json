@@ -14,11 +14,6 @@
   "minimumReleaseAge": "7 days",
   "packageRules": [
     {
-      "matchManagers": ["composer"],
-      "matchDepNames": ["php"],
-      "enabled": false
-    },
-    {
       "description": "Group all non-major updates into a single PR",
       "matchUpdateTypes": ["minor", "patch"],
       "groupName": "non-major dependencies"

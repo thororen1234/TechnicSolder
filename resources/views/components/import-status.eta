@@ -1,0 +1,18 @@
+<%
+    const problems = count(modpackImport.problems ?? [])
+    const [label, badgeClass] = (() => {
+        switch (modpackImport.status) {
+            case ModpackImport.COMPLETED:
+                return problems ? [problems + ' ' + plural('problem', problems), 'ui-badge-warning'] : ['Imported', 'ui-badge-success']
+            case ModpackImport.WAITING:
+                return ['Needs a decision', 'ui-badge-warning']
+            case ModpackImport.FAILED:
+                return ['Failed', 'ui-badge-danger']
+            case ModpackImport.CANCELLED:
+                return ['Cancelled', '']
+            default:
+                return ['In progress', 'ui-badge-primary']
+        }
+    })()
+%>
+<span <%~ attributes(attributeBag, { class: classes(['ui-badge whitespace-nowrap', badgeClass]) }, ['modpackImport']) %>><%= label %></span>

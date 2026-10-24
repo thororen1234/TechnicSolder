@@ -1,0 +1,50 @@
+<% const __sections = {}; const __capture = [] %>
+<% __capture.push(['title', __eta.res]); __eta.res = '' %>
+    <title>Create Client - Technic Solder</title>
+<% { const [__name, __prev, __append] = __capture.pop(); __sections[__name] = (__append ? (__sections?.[__name] ?? '') : '') + __eta.res; __eta.res = __prev } %>
+<% __capture.push(['content', __eta.res]); __eta.res = '' %>
+    <h1 class="text-2xl font-bold">Client Management</h1>
+
+    <div class="ui-card mt-6">
+        <div class="ui-card-header">
+            <h2 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Add Client</h2>
+        </div>
+        <div class="px-5 py-4">
+            <%~ include('/partial/form-errors', it) %>
+
+            <form method="post" action="<%= currentUrl() %>" accept-charset="UTF-8" class="max-w-lg">
+                <%~ csrfField() %>
+                <input type="hidden" name="add-client" value="1">
+
+                <div class="mb-4">
+                    <label for="name" class="ui-label">Name</label>
+                    <input type="text"
+                           name="name"
+                           id="name"
+                           class="ui-control">
+                </div>
+
+                <div class="mb-4">
+                    <label for="uuid" class="ui-label">UUID</label>
+                    <input type="text"
+                           name="uuid"
+                           id="uuid"
+                           class="ui-control">
+                </div>
+
+                <div class="flex items-center gap-3">
+                    <button type="submit"
+                            class="ui-btn ui-btn-primary">
+                        Add Client
+                    </button>
+                    <a href="<%= url('/client/list') %>"
+                       class="ui-btn ui-btn-secondary">
+                        Go Back
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+<% { const [__name, __prev, __append] = __capture.pop(); __sections[__name] = (__append ? (__sections?.[__name] ?? '') : '') + __eta.res; __eta.res = __prev } %>
+
+<% layout('/layouts/master', { ...it, __sections }) %>

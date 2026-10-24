@@ -1,9 +1,9 @@
 Technic Solder
 =============
 
-[![License](https://poser.pugx.org/solder/solder/license.svg)](https://packagist.org/packages/solder/solder)
+[![License](https://img.shields.io/github/license/TechnicPack/TechnicSolder)](LICENSE)
 
-![Latest Stable Version](https://poser.pugx.org/solder/solder/v/stable.svg) ![Build Status](https://github.com/TechnicPack/TechnicSolder/actions/workflows/tests.yml/badge.svg?branch=main)
+[![Latest Release](https://img.shields.io/github/v/release/TechnicPack/TechnicSolder)](https://github.com/TechnicPack/TechnicSolder/releases/latest) [![Build Status](https://github.com/TechnicPack/TechnicSolder/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/TechnicPack/TechnicSolder/actions/workflows/tests.yml)
 
 Join us on [Discord][discord]!
 
@@ -19,24 +19,10 @@ Solder also interfaces with the Technic Platform using an API key you can genera
 Requirements
 -------------
 
-* PHP 8.4 or higher
-* [Composer](https://getcomposer.org/)
-* [Node.js](https://nodejs.org/) 20 or higher and [pnpm](https://pnpm.io/installation)
-* `unzip` package
-* Ctype PHP Extension
-* cURL PHP Extension
-* DOM PHP Extension
-* Fileinfo PHP Extension
-* Filter PHP Extension
-* Hash PHP Extension
-* Mbstring PHP Extension
-* OpenSSL PHP Extension
-* PCRE PHP Extension
-* PDO PHP Extension
-* Session PHP Extension
-* Tokenizer PHP Extension
-* XML PHP Extension
-* A MySQL or PostgreSQL database
+* [Node.js](https://nodejs.org/) 22 or higher
+* [pnpm](https://pnpm.io/installation) (via corepack: `corepack enable`)
+* A MySQL, MariaDB, PostgreSQL or SQLite database
+* Redis (optional; needed for background jobs and for sharing cache and sessions between processes)
 
 You can find commands for this in the [getting started page](https://docs.solder.io/getting-started/#requirements).
 

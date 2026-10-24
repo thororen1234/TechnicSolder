@@ -1,9 +1,10 @@
-#!/bin/bash
+#!/bin/sh
 set -e
 
-cd /var/www/html
+cd /app
 
-composer install --no-interaction
+pnpm install --frozen-lockfile
+pnpm run prisma:generate
 
 # Generate .env for development if it doesn't exist
 if [ ! -f .env ]; then
@@ -20,26 +21,14 @@ if [ ! -f .env ]; then
     sed -i 's/^CACHE_STORE=.*/CACHE_STORE=redis/' .env
     sed -i 's/^SESSION_DRIVER=.*/SESSION_DRIVER=redis/' .env
     sed -i 's/^QUEUE_CONNECTION=.*/QUEUE_CONNECTION=redis/' .env
-    php artisan key:generate --force
+    sed -i "s|^APP_KEY=.*|APP_KEY=$(pnpm --silent solder:dev key:generate)|" .env
 fi
 
-php artisan migrate --force
+pnpm solder:dev migrate
+pnpm solder:dev setup --no-interaction
 
-# Build frontend assets if not already built
-if [ ! -d public/build ]; then
-    if command -v pnpm &> /dev/null; then
-        pnpm install --frozen-lockfile
-        pnpm run build
-    elif command -v corepack &> /dev/null; then
-        COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm install --frozen-lockfile
-        COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm run build
-    fi
-fi
-
-# Create storage directories if needed
 mkdir -p storage/mods
-chgrp -R www-data storage bootstrap/cache
-find storage bootstrap/cache -type d -exec chmod 775 {} \;
-find storage bootstrap/cache -type f -exec chmod 664 {} \;
 
-php-fpm
+# Rebuild the frontend on change in the background, and restart the server on change
+pnpm exec vite build --watch &
+exec pnpm start:dev

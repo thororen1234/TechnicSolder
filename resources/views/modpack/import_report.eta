@@ -1,0 +1,163 @@
+<% const __sections = {}; const __capture = [] %>
+<% __capture.push(['title', __eta.res]); __eta.res = '' %>
+    <title>Import of <%= modpackImport.name %> - Technic Solder</title>
+<% { const [__name, __prev, __append] = __capture.pop(); __sections[__name] = (__append ? (__sections?.[__name] ?? '') : '') + __eta.res; __eta.res = __prev } %>
+<% __capture.push(['content', __eta.res]); __eta.res = '' %>
+    <%
+        const log = modpackImport.log ?? []
+        const problems = modpackImport.problems ?? []
+        const errorCount = collect(log).where('level', 'error').count()
+    %>
+    <div class="max-w-4xl mx-auto"
+         <% if (in_array(modpackImport.status, [ModpackImport.QUEUED, ModpackImport.RUNNING], true)) { %>
+             x-data x-init="setTimeout(() => window.location.reload(), 5000)"
+         <% } %>>
+        <div class="page-header">
+            <div class="min-w-0">
+                <div class="flex items-center gap-3 flex-wrap">
+                    <h1 class="page-title truncate">Import of <%= modpackImport.name %></h1>
+                    <%~ include('/components/import-status', { ...it, "modpackImport": modpackImport, attributeBag: { "modpackImport": modpackImport } }) %>
+                </div>
+                <p class="page-subtitle break-all">From <%= modpackImport.source %></p>
+            </div>
+            <a href="<%= route('modpack.import') %>" class="ui-btn ui-btn-secondary shrink-0">Imports</a>
+        </div>
+
+        <% if (session('success')) { const value = session('success') %>
+            <div class="ui-alert ui-alert-success mb-6 p-4"><%= value %></div>
+        <% } %>
+        <%~ include('/partial/form-errors', it) %>
+
+        <% if (modpackImport.status === ModpackImport.WAITING) { %>
+            <section class="ui-card mb-6 overflow-hidden">
+                <div class="ui-alert ui-alert-warning rounded-none border-0 p-5">
+                    <p class="font-medium"><%= modpackImport.modpack?.name %> already has a build <%= modpackImport.build_version %>.</p>
+                    <p class="mt-1 text-sm">Nothing has been changed yet. Choose what to do with this pack.</p>
+                </div>
+                <% if (can('update', modpackImport)) { %>
+                    <% if (modpackImport.archiveExists) { %>
+                        <div class="p-5 grid grid-cols-1 md:grid-cols-3 gap-5 text-sm">
+                            <form method="POST" action="<%= url('modpack/imports/' + modpackImport.id) %>" class="space-y-2"
+                                  onsubmit="return confirm(<%~ js(`Replace every mod in build ${modpackImport.build_version} with the ones in this pack?`) %>)">
+                                <%~ csrfField() %>
+                                <input type="hidden" name="action" value="overwrite">
+                                <p class="font-medium text-gray-950 dark:text-white">Overwrite it</p>
+                                <p class="text-gray-500">Replace the build's mods with the pack's. Its published and recommended settings stay as they are.</p>
+                                <button type="submit" class="ui-btn ui-btn-sm ui-btn-danger">Overwrite <%= modpackImport.build_version %></button>
+                            </form>
+                            <form method="POST" action="<%= url('modpack/imports/' + modpackImport.id) %>" class="space-y-2">
+                                <%~ csrfField() %>
+                                <input type="hidden" name="action" value="rename">
+                                <label for="version" class="block font-medium text-gray-950 dark:text-white">Import as another version</label>
+                                <input type="text" name="version" id="version" value="<%= old('version') %>" required
+                                       placeholder="<%= modpackImport.build_version %>-1" class="ui-control font-mono">
+                                <button type="submit" class="ui-btn ui-btn-sm ui-btn-primary">Import as new build</button>
+                            </form>
+                            <form method="POST" action="<%= url('modpack/imports/' + modpackImport.id) %>" class="space-y-2">
+                                <%~ csrfField() %>
+                                <input type="hidden" name="action" value="cancel">
+                                <p class="font-medium text-gray-950 dark:text-white">Don't import it</p>
+                                <p class="text-gray-500">Discard the uploaded pack and leave the modpack as it is.</p>
+                                <button type="submit" class="ui-btn ui-btn-sm ui-btn-secondary">Cancel import</button>
+                            </form>
+                        </div>
+                    <% } else { %>
+                        <p class="p-5 text-sm text-gray-500">The uploaded pack is no longer available. Start the import again.</p>
+                    <% } %>
+                <% } else { %>
+                    <p class="p-5 text-sm text-gray-500">Only someone who manages <%= modpackImport.modpack?.name %> can decide.</p>
+                <% } %>
+                <p class="px-5 pb-4 text-xs text-gray-500">Undecided imports are cancelled after <%= ModpackImport.WAITING_DAYS %> days.</p>
+            </section>
+        <% } %>
+
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+            <div class="ui-stat">
+                <p class="ui-stat-label">Mods imported</p>
+                <p class="ui-stat-value"><%= modpackImport.imported %></p>
+            </div>
+            <div class="ui-stat">
+                <p class="ui-stat-label">Skipped</p>
+                <p class="ui-stat-value"><%= modpackImport.skipped %></p>
+            </div>
+            <div class="ui-stat">
+                <p class="ui-stat-label">Problems</p>
+                <p class="ui-stat-value"><%= count(problems) %></p>
+            </div>
+            <div class="ui-stat">
+                <p class="ui-stat-label">Build</p>
+                <p class="ui-stat-value font-mono text-xl truncate">
+                    <% if (modpackImport.build) { %>
+                        <a href="<%= url('modpack/build/' + modpackImport.build.id) %>" class="hover:underline underline-offset-2"><%= modpackImport.build.version %></a>
+                    <% } else { %>
+                        <%= modpackImport.build_version || '-' %>
+                    <% } %>
+                </p>
+            </div>
+        </div>
+
+        <section class="ui-card mb-6">
+            <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 p-5 text-sm">
+                <div>
+                    <dt class="text-xs text-gray-500">Modpack</dt>
+                    <dd class="mt-0.5 text-gray-950 dark:text-white">
+                        <% if (modpackImport.modpack) { %>
+                            <a href="<%= url('modpack/view/' + modpackImport.modpack.id) %>" class="hover:underline underline-offset-2"><%= modpackImport.modpack.name %></a>
+                            <span class="text-gray-500"><%= modpackImport.slug === null ? '(existing)' : '(created by this import)' %></span>
+                        <% } else { %>
+                            <%= modpackImport.name %>
+                        <% } %>
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-gray-500">Started by</dt>
+                    <dd class="mt-0.5 text-gray-950 dark:text-white">
+                        <%= modpackImport?.user?.username ?? 'Unknown' %> ·
+                        <time datetime="<%= modpackImport.created_at.toIso8601String() %>" title="<%= modpackImport.created_at %>"><%= modpackImport.created_at.diffForHumans() %></time>
+                    </dd>
+                </div>
+            </dl>
+        </section>
+
+        <% if (count(problems) > 0) { %>
+            <section class="ui-card mb-6 overflow-hidden">
+                <div class="ui-card-header flex items-center justify-between">
+                    <h2 class="section-title"><%= modpackImport.status === ModpackImport.FAILED ? 'Errors' : 'Problems' %></h2>
+                    <span class="ui-badge ui-badge-warning"><%= count(problems) %></span>
+                </div>
+                <ul class="divide-y divide-gray-100 dark:divide-gray-900">
+                    <% for (const problem of (problems ?? [])) { %>
+                        <li class="px-5 py-2.5 text-sm text-gray-700 dark:text-gray-300"><%= problem %></li>
+                    <% } %>
+                </ul>
+            </section>
+        <% } %>
+
+        <section class="ui-card overflow-hidden" x-data="{ errorsOnly: false }">
+            <div class="ui-card-header flex items-center justify-between gap-3">
+                <h2 class="section-title">Log</h2>
+                <% if (errorCount > 0) { %>
+                    <label class="flex items-center gap-2 text-xs text-gray-500 cursor-pointer">
+                        <input type="checkbox" x-model="errorsOnly" class="ui-checkbox">
+                        Only problems (<%= errorCount %>)
+                    </label>
+                <% } %>
+            </div>
+            <% if (count(log) === 0) { %>
+                <p class="px-5 py-10 text-center text-sm text-gray-500">Nothing logged yet.</p>
+            <% } else { %>
+                <ol class="divide-y divide-gray-100 dark:divide-gray-900 font-mono text-xs max-h-144 overflow-y-auto">
+                    <% for (const entry of (log ?? [])) { %>
+                        <li class="flex gap-3 px-5 py-1.5 <%= entry['level'] === 'error' ? 'bg-red-50/60 dark:bg-red-500/5 text-red-700 dark:text-red-300' : 'text-gray-700 dark:text-gray-300' %>"
+                            <% if (entry['level'] !== 'error') { %> x-show="!errorsOnly" <% } %>>
+                            <time class="shrink-0 text-gray-400 tabular-nums" datetime="<%= entry['time'] %>"><%= carbon(entry['time']).format('H:i:s') %></time>
+                            <span class="min-w-0 wrap-break-word"><%= entry['message'] %></span>
+                        </li>
+                    <% } %>
+                </ol>
+            <% } %>
+        </section>
+    </div>
+<% { const [__name, __prev, __append] = __capture.pop(); __sections[__name] = (__append ? (__sections?.[__name] ?? '') : '') + __eta.res; __eta.res = __prev } %>
+
+<% layout('/layouts/master', { ...it, __sections }) %>

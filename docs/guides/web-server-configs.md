@@ -7,7 +7,7 @@ This guide provides nginx, Apache, and Caddy configurations for both the Solder 
 
 ## Solder Application
 
-The application server block points its document root at Solder's `public/` directory and routes all requests through `index.php`.
+Solder runs its own HTTP server (`pnpm start`, port `3000` by default) and serves its static files itself, so the web server only needs to reverse-proxy every request to it. Allow large request bodies and long timeouts: modpack imports upload large archives, and importing or exporting a pack downloads every mod. The nginx config used by the Docker stack is in `docker/default.conf`.
 
 === "nginx"
 
@@ -20,46 +20,30 @@ The application server block points its document root at Solder's `public/` dire
         access_log /var/log/nginx/solder.example.com_access.log;
         error_log  /var/log/nginx/solder.example.com_error.log;
 
-        root  /var/www/solder/TechnicSolder/public;
-        index index.php;
+        # Modpack archives can be large, and importing or exporting one downloads every mod
+        client_max_body_size 512m;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
 
         location / {
-            try_files $uri $uri/ /index.php?$query_string;
-        }
-
-        location ~* \.php$ {
-            fastcgi_pass            unix:/run/php/php8.4-fpm.sock;
-            fastcgi_index           index.php;
-            fastcgi_split_path_info ^(.+\.php)(.*)$;
-            include                 fastcgi_params;
-            fastcgi_param PATH_INFO       $fastcgi_path_info;
-            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-
-            # If behind a load balancer that terminates TLS:
-            # fastcgi_param HTTPS on;
-        }
-
-        # Deny access to hidden files (except .well-known for ACME challenges)
-        location ~ /\.(?!well-known).* {
-            deny all;
-            access_log off;
-            log_not_found off;
-            return 404;
-        }
-
-        # Cache static assets
-        location ~* \.(?:ico|css|js|jpe?g|JPG|png|svg|woff)$ {
-            expires 365d;
+            proxy_pass http://127.0.0.1:3000;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Forwarded-Host $host;
+            # Stream uploads to Solder instead of buffering them on disk first
+            proxy_request_buffering off;
         }
     }
     ```
 
 === "Apache"
 
-    Requires `mod_proxy_fcgi` and PHP-FPM:
+    Requires `mod_proxy` and `mod_proxy_http`:
 
     ```bash
-    sudo a2enmod proxy_fcgi rewrite
+    sudo a2enmod proxy proxy_http headers
     sudo systemctl restart apache2
     ```
 
@@ -67,20 +51,15 @@ The application server block points its document root at Solder's `public/` dire
     <VirtualHost *:80>
         ServerName solder.example.com
         ServerAdmin admin@example.com
-        DocumentRoot /var/www/html/TechnicSolder/public/
 
-        <Directory /var/www/html/TechnicSolder/public>
-            Options FollowSymLinks
-            AllowOverride All
-            Require all granted
-        </Directory>
+        # Modpack archives can be large, and importing or exporting one downloads every mod
+        LimitRequestBody 536870912
+        ProxyTimeout 3600
 
-        <FilesMatch \.php$>
-            SetHandler "proxy:unix:/run/php/php8.4-fpm.sock|fcgi://localhost"
-        </FilesMatch>
-
-        # If behind a load balancer that terminates TLS:
-        # SetEnvIf X-Forwarded-Proto https HTTPS=on
+        ProxyPreserveHost On
+        ProxyPass        / http://127.0.0.1:3000/
+        ProxyPassReverse / http://127.0.0.1:3000/
+        RequestHeader set X-Forwarded-Proto expr=%{REQUEST_SCHEME}
 
         ErrorLog ${APACHE_LOG_DIR}/solder_error.log
         CustomLog ${APACHE_LOG_DIR}/solder_access.log combined
@@ -91,17 +70,20 @@ The application server block points its document root at Solder's `public/` dire
 
     ```caddy
     solder.example.com {
-        root * /var/www/solder/TechnicSolder/public
-        php_fastcgi unix//run/php/php8.4-fpm.sock
-        file_server
+        request_body {
+            max_size 512MB
+        }
 
-        # Cache static assets
-        @static path *.ico *.css *.js *.jpg *.jpeg *.png *.svg *.woff
-        header @static Cache-Control "max-age=31536000"
+        reverse_proxy 127.0.0.1:3000 {
+            transport http {
+                read_timeout 3600s
+                write_timeout 3600s
+            }
+        }
     }
     ```
 
-    Caddy's `php_fastcgi` directive automatically handles routing all requests through `index.php` — no `try_files` equivalent is needed. Caddy also provisions and renews TLS certificates automatically; see the [HTTPS](#https) section below.
+    Caddy's `reverse_proxy` forwards the `Host`, `X-Forwarded-For` and `X-Forwarded-Proto` headers automatically. Caddy also provisions and renews TLS certificates automatically; see the [HTTPS](#https) section below.
 
 ## Mod Repository
 
@@ -169,15 +151,12 @@ The repository server block serves mod zip files as static downloads. The nginx 
 
 ## Apache Modules
 
-The Apache configuration above requires two modules:
+The Apache configuration above requires these modules:
 
-1. **`mod_proxy_fcgi`** — forwards PHP requests to PHP-FPM instead of using the legacy `mod_php` (which is incompatible with Apache's event MPM).
-2. **`mod_rewrite`** — Laravel ships with a `public/.htaccess` file that uses `mod_rewrite` to route all requests through `index.php`.
+1. **`mod_proxy`** and **`mod_proxy_http`** — forward requests to Solder's HTTP server.
+2. **`mod_headers`** — sets the `X-Forwarded-Proto` header so Solder knows whether the original request used HTTPS.
 
-Both are enabled in the vhost setup instructions above. The `<Directory>` block must also have `AllowOverride All` to allow `.htaccess` processing (already included in the vhost).
-
-!!! warning
-    Without `mod_rewrite` and `AllowOverride All`, Laravel's routing will not work. All URLs will require `/index.php` in the path (e.g. `solder.example.com/index.php/dashboard` instead of `solder.example.com/dashboard`).
+`mod_proxy_http` adds the `X-Forwarded-For` and `X-Forwarded-Host` headers itself. All three modules are enabled in the vhost setup instructions above.
 
 ## HTTPS
 
@@ -213,17 +192,17 @@ If Solder sits behind a reverse proxy or load balancer that terminates TLS, the 
     APP_URL=https://solder.example.com
     ```
 
-2. **Tell PHP that HTTPS is active.** In nginx, uncomment the `fastcgi_param` line in the Solder server block:
+2. **Tell Solder that HTTPS is active.** If the TLS-terminating proxy sits in front of your nginx or Apache, pass its `X-Forwarded-Proto` header on instead of replacing it with the local scheme. In nginx, change the header line in the Solder server block:
 
     ```nginx
-    fastcgi_param HTTPS on;
+    proxy_set_header X-Forwarded-Proto https;
     ```
 
-    For Apache, add the following inside your `<VirtualHost>` block:
+    For Apache, change the `RequestHeader` line inside your `<VirtualHost>` block:
 
     ```apache
-    SetEnvIf X-Forwarded-Proto https HTTPS=on
+    RequestHeader set X-Forwarded-Proto https
     ```
 
 !!! tip
-    Make sure your reverse proxy forwards the `X-Forwarded-For` and `X-Forwarded-Proto` headers so Laravel can correctly detect the client IP and protocol. Laravel's `TrustProxies` middleware handles this automatically when configured.
+    Make sure your reverse proxy forwards the `X-Forwarded-For` and `X-Forwarded-Proto` headers so Solder can correctly detect the client IP and protocol. Solder trusts these proxy headers, so don't expose port 3000 directly to the internet.

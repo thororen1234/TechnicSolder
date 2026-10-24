@@ -27,7 +27,7 @@ Without either parameter, only public modpacks are returned.
 
 ### Write API — Bearer Token
 
-All write endpoints require a Sanctum bearer token in the `Authorization` header:
+All write endpoints require a Sanctum-style bearer token in the `Authorization` header:
 
 ```
 Authorization: Bearer 1|abc123def456...
@@ -55,8 +55,8 @@ Read API responses are cached for up to 5 minutes. Write operations automaticall
 
 ## Rate Limiting
 
-The `GET /api/verify/{key}` endpoint is rate-limited. All other endpoints use default Laravel rate limiting.
+The `GET /api/verify/{key}` endpoint is rate-limited. All other endpoints are limited to 60 requests per minute per user (or per IP address for anonymous requests).
 
 ## Disabling the Mod API
 
-Set `SOLDER_DISABLE_MOD_API=true` in your `.env` to disable public reads from the `/api/mod` endpoints. Anonymous requests and `cid` or `k` query credentials then receive a 404 response. Sanctum bearer-token users with `mods_manage` or `solder_full` permission can still read these endpoints. Write endpoints remain governed by their existing authorization policies.
+Set `SOLDER_DISABLE_MOD_API=true` in your `.env` to disable public reads from the `/api/mod` endpoints. Anonymous requests and `cid` or `k` query credentials then receive a 404 response. Bearer-token users with `mods_manage` or `solder_full` permission can still read these endpoints. Write endpoints remain governed by their existing authorization policies.

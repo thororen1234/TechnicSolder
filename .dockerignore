@@ -1,0 +1,12 @@
+.git
+.env
+.env.*
+node_modules
+dist
+public/build
+public/hot
+src/generated
+prisma/generated
+storage
+docker/mysql
+coverage

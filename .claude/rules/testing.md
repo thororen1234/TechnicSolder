@@ -1,18 +1,17 @@
 # Testing
 
 - Every change must be programmatically tested. Write a new test or update an existing test, then run it.
-- Do not create verification scripts or tinker when tests cover the functionality. Unit and feature tests are more important.
-- All tests must be PHPUnit classes. Use `docker compose -f compose.dev.yml exec -T solder php artisan make:test --phpunit {name}` to create a new test. Pass `--unit` for unit tests. Most tests should be feature tests.
-- If you see a test using "Pest", convert it to PHPUnit.
-- Use factories for test models. Check for custom factory states before manual setup.
-- Faker: follow existing conventions (`$this->faker` vs `fake()`).
-- Cover all happy paths, failure paths, and edge cases.
-- Run the singular test after every update. When feature tests pass, ask user about running the full suite.
+- Tests are Vitest files: `tests/Unit/*.test.ts` and `tests/Feature/*.test.ts`. Shared helpers are in `tests/support/helpers.ts`.
+- Call `useSolder()` in each `describe`. It resets the database (seeded with the test data unless `{ seed: false }`), config, cache, HTTP fakes, mail and the queue fake before every test.
+- Use the helpers instead of manual setup: `actingAs(user)`, `admin()`, `makeUser(permissions)`, `client({ token })`, `agent()` for cookie-based sign-in flows, `flashed()`, `flashedErrors()`, `redirectPath()`, `lastView()`, `useModRepository()`, `makeArchive()`, `putModversionZip()`, `fakeFabricMeta()`, `binary()` for downloads.
+- No test may reach the network: fake requests with `Http.fake({...})` (`src/support/http.ts`); `useModRepository()` also blocks stray requests. Record queued jobs with `Queue.fake()` (`src/jobs/queue.ts`).
+- Cover happy paths, failure paths, and edge cases.
 - Do not remove tests or test files without approval.
 
 ## Running Tests
 
-- Run the minimal number of tests using an appropriate filter before finalizing.
-- All tests: `docker compose -f compose.dev.yml exec -T solder php artisan test --compact`
-- Single file: `docker compose -f compose.dev.yml exec -T solder php artisan test --compact tests/Feature/ExampleTest.php`
-- Specific test: `docker compose -f compose.dev.yml exec -T solder php artisan test --compact --filter=testName` (recommended)
+- Run the minimal number of tests using a file or name filter before finalizing; when they pass, ask the user about running the full suite.
+- All tests: `pnpm test`
+- Single file: `pnpm test tests/Feature/build-health.test.ts`
+- Specific test: `pnpm test -t "reports a missing mod loader"`
+- In the dev containers: `docker compose -f compose.dev.yml exec -T solder pnpm test`

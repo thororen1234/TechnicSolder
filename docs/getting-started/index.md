@@ -14,43 +14,21 @@ This guide walks through installing Technic Solder directly on a Linux server.
 ## Requirements
 
 - **Git**
-- **PHP >= 8.4**
-- **Composer** ([getcomposer.org](https://getcomposer.org/))
-- **Node.js >= 20** and **pnpm** ([pnpm.io](https://pnpm.io/installation))
-- **unzip**
-- **A MariaDB, MySQL, or PostgreSQL database**
-
-### Required PHP Extensions
-
-BCMath, cURL, ctype, fileinfo, JSON, mbstring, OpenSSL, PDO, Redis, Tokenizer, XML, ZIP
+- **Node.js >= 22** ([nodejs.org](https://nodejs.org/))
+- **pnpm** ([pnpm.io](https://pnpm.io/installation)), easiest through corepack, which ships with Node.js
+- **A MariaDB, MySQL, PostgreSQL, or SQLite database**
+- **Redis** (optional; needed for background jobs, and to share the cache and sessions between processes)
 
 ### Example: Ubuntu 24.04
 
 ```bash
-# Add the PHP PPA: https://launchpad.net/~ondrej/+archive/ubuntu/php
-LC_ALL=C.UTF-8 sudo add-apt-repository ppa:ondrej/php
-sudo apt update
+# Node.js 22 from NodeSource: https://github.com/nodesource/distributions
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install git nodejs
 
-# If you're using PostgreSQL, replace php8.4-mysql with php8.4-pgsql
-sudo apt install git unzip php8.4 php8.4-bcmath php8.4-cli php8.4-curl \
-    php8.4-fpm php8.4-mbstring php8.4-mysql php8.4-redis php8.4-xml php8.4-zip
+# Use the pnpm version pinned in Solder's package.json
+sudo corepack enable
 ```
-
-## Installing Composer
-
-Solder uses Composer to manage PHP dependencies. Install it using [the official guide](https://getcomposer.org/doc/00-intro.md#installation-linux-unix-macos). Installing Composer globally is recommended.
-
-If you already have Composer installed, make sure it is up to date:
-
-```bash
-# Globally installed
-sudo composer self-update
-
-# Locally installed
-php composer.phar self-update
-```
-
-The rest of this guide assumes a global Composer installation. Adjust commands accordingly if you installed it locally.
 
 ## Installing Solder
 
@@ -59,13 +37,8 @@ Clone the repository and install dependencies:
 ```bash
 git clone https://github.com/TechnicPack/TechnicSolder.git
 cd TechnicSolder
-composer install --no-dev --no-interaction
 pnpm install --frozen-lockfile
-pnpm run build
 ```
-
-!!! note
-    If you want to help develop Solder, omit `--no-dev` to include development dependencies.
 
 ## Configuring Solder
 
@@ -80,14 +53,14 @@ Open `.env` in your text editor and update the variables listed below. Leave any
 | Variable | Description |
 |----------|-------------|
 | `APP_URL` | The URL where Solder will be accessible (e.g. `https://solder.example.com`). |
-| `DB_CONNECTION` | Database type: `mariadb`, `mysql`, or `pgsql`. |
+| `DB_CONNECTION` | Database type: `mariadb`, `mysql`, `pgsql`, or `sqlite`. |
 | `DB_HOST` | Database server IP. Use `127.0.0.1` if running on the same server. |
 | `DB_PORT` | Database port. `3306` for MySQL/MariaDB, `5432` for PostgreSQL. |
-| `DB_DATABASE` | Name of your database. |
+| `DB_DATABASE` | Name of your database. For SQLite, the path to the database file, relative to the Solder directory (e.g. `storage/solder.sqlite`). |
 | `DB_USERNAME` | Database username. |
 | `DB_PASSWORD` | Database password. |
-| `CACHE_STORE` | Cache backend. Use `file` for local storage or `redis` (recommended) if you have a Redis server. |
-| `SESSION_DRIVER` | Session backend. Same options as `CACHE_STORE`. |
+| `CACHE_STORE` | Cache backend. Use `redis` (recommended) if you have a Redis server; any other value keeps the cache in memory. |
+| `SESSION_DRIVER` | Session backend. Use `redis` if you have a Redis server; any other value keeps sessions in memory, so everyone is logged out when Solder restarts. |
 | `REDIS_HOST` | Redis server IP (if using Redis). |
 | `REDIS_PASSWORD` | Redis password, if one is set. |
 | `REDIS_PORT` | Redis server port (default `6379`). |
@@ -101,42 +74,50 @@ Open `.env` in your text editor and update the variables listed below. Leave any
 
 - **`SOLDER_MIRROR_URL`** is the web-accessible URL that players' launchers will use to download mods (e.g. `https://mods.example.com/`). If you used a URL for the repo location, you can use the same value here. A trailing slash is recommended but will be added automatically if omitted.
 
-## Generate Application Key
+## Build Solder
 
-Solder requires an encryption key to function. Generate one automatically:
+Build the frontend assets (into `public/build`), generate the Prisma database clients, and compile the server into `dist/`:
 
 ```bash
-php artisan key:generate
+pnpm run build
 ```
 
-This sets the `APP_KEY` value in your `.env` file.
+## Generate Application Key
+
+Solder requires an encryption key to function. Generate one:
+
+```bash
+pnpm solder key:generate
+```
+
+This prints a new key. Copy it into the `APP_KEY` value in your `.env` file.
+
+!!! warning
+    Don't change this key later: it decrypts stored two-factor authentication secrets.
 
 ## Database Setup
 
-Create a database for Solder. The default `DB_DATABASE` in `.env.example` is `laravel` — you'll likely want to change this to something like `solder`. Use any name as long as it matches `DB_DATABASE` in your `.env`.
+Create a database for Solder. The default `DB_DATABASE` in `.env.example` is `solder`. Use any name as long as it matches `DB_DATABASE` in your `.env`. SQLite needs no setup; the database file is created automatically.
 
 Instructions for creating the database vary by database server and are not covered here.
 
 Once your database is ready, run the migration to create all required tables:
 
 ```bash
-php artisan migrate --force
+pnpm solder migrate
 ```
-
-!!! note
-    The `--force` flag is needed because Solder runs in production mode by default. It is safe to use here.
 
 ## Initial Setup
 
 After migrating, run the setup command to create the initial admin user:
 
 ```bash
-php artisan solder:setup
+pnpm solder setup
 ```
 
-This will interactively prompt for an email and password.
+This will interactively prompt for an email and password. Pass `--username=name` to choose the admin's username.
 
-In non-interactive mode (e.g. Docker, CI scripts), a random password is generated and printed to the console. You can provide credentials via environment variables instead:
+In non-interactive mode (`--no-interaction` or `-n`, e.g. in scripts), a random password is generated and printed to the console. You can provide credentials via environment variables instead:
 
 ```bash
 SOLDER_INITIAL_ADMIN_EMAIL=admin@example.com
@@ -146,23 +127,33 @@ SOLDER_INITIAL_ADMIN_PASSWORD=your-secure-password
 !!! warning
     Change these credentials immediately after your first login.
 
+## Starting Solder
+
+Start the web server:
+
+```bash
+pnpm start
+```
+
+Solder listens on port `3000` by default (set `PORT` to change it) and serves its static files from `public/` itself. Use a process manager such as systemd or pm2 to keep it running and start it on boot.
+
 ## Web Server Configuration
 
-Your web server (nginx or Apache) needs to be configured to serve Solder's `public/` directory and pass PHP requests to PHP-FPM.
+Put a web server (nginx, Apache, or Caddy) in front of Solder as a reverse proxy to `http://127.0.0.1:3000`. It handles HTTPS and the large uploads used by modpack imports.
 
-See [Example Web Server Configs](../guides/web-server-configs.md) for complete nginx and Apache configuration examples.
+See [Example Web Server Configs](../guides/web-server-configs.md) for complete nginx, Apache, and Caddy configuration examples.
 
 ### File permissions
 
-Your web server user needs:
+The user running Solder needs:
 
 - **Read** access to the entire Solder directory
-- **Read and write** access to `storage/` and `bootstrap/cache/`
+- **Read and write** access to `storage/`
+- **Read and write** access to the mod repository, if you upload or import mods through Solder
 
 ```bash
-# Example: set ownership to the www-data user
-sudo chown -R www-data:www-data /path/to/TechnicSolder/storage
-sudo chown -R www-data:www-data /path/to/TechnicSolder/bootstrap/cache
+# Example: set ownership to a dedicated solder user
+sudo chown -R solder:solder /path/to/TechnicSolder/storage
 ```
 
 ### HTTPS
@@ -170,47 +161,41 @@ sudo chown -R www-data:www-data /path/to/TechnicSolder/bootstrap/cache
 If you use HTTPS (recommended), make sure `APP_URL` in your `.env` starts with `https://`.
 
 !!! warning
-    If Solder is behind a load balancer or reverse proxy that terminates TLS (e.g. Cloudflare), you may need to configure your PHP-FPM pool with the `HTTPS` environment variable. See the [web server configs guide](../guides/web-server-configs.md) for details.
+    If Solder is behind a load balancer or reverse proxy that terminates TLS (e.g. Cloudflare), make sure it forwards the `X-Forwarded-Proto` header. See the [web server configs guide](../guides/web-server-configs.md) for details.
 
 ## Background Jobs
 
 Modpack imports, exports and build update checks can take several minutes for large packs. By default
 (`QUEUE_CONNECTION=sync`) they run inside the web request, so the page waits until they finish.
 
-To run them in the background with a progress page, set `QUEUE_CONNECTION=database` in `.env` and keep a
-queue worker running, for example with systemd or Supervisor:
+To run them in the background with a progress page, set `QUEUE_CONNECTION=redis` in `.env` (this needs Redis, so
+set `CACHE_STORE=redis` and `SESSION_DRIVER=redis` too) and keep a worker running, for example with systemd or pm2:
 
 ```bash
-php artisan queue:work --tries=1 --timeout=3600
+pnpm worker
 ```
 
-Restart the worker after updating Solder so it loads the new code (`php artisan queue:restart`).
+Restart the worker after updating Solder so it loads the new code.
 
-Solder also checks every modpack's latest build for mod updates each night. Add Laravel's scheduler to cron to run it:
+Solder also checks every modpack's latest build for mod updates each night at 04:00 (in `APP_TIMEZONE`; turn this off
+with `SOLDER_SCHEDULED_UPDATE_CHECKS=false`) and cleans up abandoned imports daily. Keep the scheduler running for this:
 
 ```bash
-* * * * * cd /path/to/TechnicSolder && php artisan schedule:run >> /dev/null 2>&1
+pnpm scheduler
 ```
+
+To run the update check once by hand, use `pnpm solder check-updates`.
 
 Set `SOLDER_DISCORD_WEBHOOK` to post the results (and finished imports, published builds and repository problems) to a Discord channel.
 
 To get them as direct messages instead, create an application in the [Discord Developer Portal](https://discord.com/developers/applications), copy its bot token into `SOLDER_DISCORD_BOT_TOKEN` and add the bot to a server you're in (Discord only lets bots message users they share a server with). Then turn on Developer Mode in Discord, right-click your name, choose **Copy User ID** and put it in `SOLDER_DISCORD_USER_ID`. Separate several IDs with commas. Use **Send test message** under Settings to check it works.
-
-## Optimize
-
-Cache Solder's configuration, routes, and views for better performance:
-
-```bash
-php artisan optimize
-```
 
 ## Keeping Solder Updated
 
 Solder's dependencies are frequently updated. Set up a cron job (or similar) to keep them current:
 
 ```bash
-cd /path/to/TechnicSolder && composer update --no-dev --no-interaction && pnpm install --frozen-lockfile && pnpm run build && php artisan optimize
+cd /path/to/TechnicSolder && git pull && pnpm install --frozen-lockfile && pnpm run build && pnpm solder migrate
 ```
 
-!!! tip
-    You can also pull the latest Solder code at the same time by adding `git pull` before `composer update`.
+Then restart Solder (and the worker and scheduler, if you run them). See [Updating Solder](../guides/updating.md) for details.

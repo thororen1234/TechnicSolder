@@ -1,11 +1,18 @@
 # Supply-chain hardening.
 
 # Dependency lifecycle scripts (preinstall/install/postinstall) are blocked by
-# default, and the install fails on any unreviewed one (strictDepBuilds). This
-# project needs none; fsevents (macOS-only, optional) degrades gracefully to
-# file-watch polling.
+# default, and the install fails on any unreviewed one (strictDepBuilds).
+# better-sqlite3 needs its install script to fetch (or build) its native
+# binding; it backs the SQLite driver used by the tests. fsevents (macOS-only,
+# optional) degrades gracefully to file-watch polling.
 allowBuilds:
+  better-sqlite3: true
+  esbuild: true
   fsevents: false
+  msgpackr-extract: false
+  "@swc/core": true
+  "@prisma/engines": false
+  prisma: false
 
 # Dependency cooldown: only install versions published more than 7 days ago
 # (value in minutes), so malicious or yanked releases are caught by the

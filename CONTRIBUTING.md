@@ -18,7 +18,7 @@ make sure you follow our guidelines.
 4. Fork the project, clone it and make your changes in an extra branch with a proper branch name ``bugfix-``,
    ``patch-``, ``feature-``.
 
-5. Test your changes using phpunit, commit and push them to your fork.
+5. Test your changes using `pnpm test`, commit and push them to your fork.
 
 6. Submit the pull request to the dev branch with a short summary what you've changed and why it should be changed in
    that way.

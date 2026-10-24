@@ -5,18 +5,16 @@
 
 ## Standard Update (Bare-Metal)
 
-Put Solder into maintenance mode, pull the latest code, update dependencies, run migrations, and bring it back up:
+Pull the latest code, update dependencies, rebuild, run migrations, and restart Solder:
 
 ```bash
-php artisan down
 git pull
-composer install --no-dev --no-interaction
 pnpm install --frozen-lockfile
 pnpm run build
-php artisan migrate
-php artisan optimize
-php artisan up
+pnpm solder migrate
 ```
+
+Then restart the web server (`pnpm start`) and, if you run them, the worker (`pnpm worker`) and scheduler (`pnpm scheduler`) through your process manager, so they load the new code.
 
 !!! note
     If `git pull` fails because untracked files would be overwritten, you may need to reset before pulling:
@@ -37,7 +35,7 @@ git pull
 docker compose up -d --build
 ```
 
-The container entrypoint handles migrations and optimization automatically on startup.
+The container entrypoint runs migrations automatically on startup.
 
 ## Branch Rename
 
@@ -49,6 +47,19 @@ git fetch origin
 git branch -u origin/main main
 git remote set-head origin -a
 ```
+
+## Upgrading from the PHP Version (1.x)
+
+Solder is now written in TypeScript and runs on Node.js instead of PHP. It uses the same database and schema, so you can point it at your existing database:
+
+- Migrations continue from Laravel's `migrations` table; `pnpm solder migrate` only runs the ones that are new.
+- Existing bcrypt passwords, API tokens and two-factor secrets keep working.
+- **Keep your existing `APP_KEY`.** It decrypts the stored two-factor secrets; with a new key, users with two-factor authentication can't log in.
+- Imports waiting for a decision and finished exports are read from `storage/app/private` (`SOLDER_STORAGE_PATH`).
+
+For a bare-metal install, follow the [installation guide](../getting-started/index.md) with your existing `.env`, then replace PHP-FPM in your web server config with a reverse proxy to Solder (see [Web Server Configuration](web-server-configs.md)), and replace `php artisan queue:work` and `schedule:run` with `pnpm worker` and `pnpm scheduler`. Settings that only applied to Laravel (such as `HASH_VERIFY`, `LOG_CHANNEL` or `SESSION_ENCRYPT`) are ignored and can be removed; see the [Configuration reference](../getting-started/configuration.md) for the supported ones.
+
+For Docker, the image no longer contains nginx or PHP-FPM, and storage moved from the project directory to the named `storage` volume (copy `storage/app/private` into it if you have imports waiting). Keep the `APP_KEY` in your `.env`: the new stack reads it from there and only generates a new key when none is set.
 
 ## Version-Specific Notes
 
@@ -63,7 +74,7 @@ git remote set-head origin -a
 - Password policy now requires minimum 8 characters and checks against breached databases
 - Docker: Redis image replaced by **Valkey**
 
-Run `php artisan migrate` to create the new `personal_access_tokens`, `password_reset_tokens` tables and add 2FA columns to `users`.
+The migrations create the new `personal_access_tokens`, `password_reset_tokens` tables and add 2FA columns to `users`.
 
 ### v0.8.0
 
@@ -122,4 +133,4 @@ To migrate the old table:
     RENAME TABLE laravel_migrations TO migrations;
     ```
 
-4. Run `php artisan migrate` to apply any remaining migrations.
+4. Run `pnpm solder migrate` to apply any remaining migrations.

@@ -1,0 +1,22 @@
+<% const __sections = {}; const __capture = [] %>
+<% __capture.push(['title', __eta.res]); __eta.res = '' %>
+    <title>Activity - Technic Solder</title>
+<% { const [__name, __prev, __append] = __capture.pop(); __sections[__name] = (__append ? (__sections?.[__name] ?? '') : '') + __eta.res; __eta.res = __prev } %>
+<% __capture.push(['content', __eta.res]); __eta.res = '' %>
+    <div class="page-header">
+        <div>
+            <h1 class="page-title">Activity</h1>
+            <p class="page-subtitle">Who changed which modpack and build, and when.</p>
+        </div>
+    </div>
+
+    <section class="ui-card overflow-hidden">
+        <%~ include('/partial/activity-list', { ...it, ...{'entries': entries,'showModpack': true,'empty': 'Nothing has changed yet.'} }) %>
+    </section>
+
+    <% if (entries.hasPages()) { %>
+        <div class="mt-4"><%~ entries.links() %></div>
+    <% } %>
+<% { const [__name, __prev, __append] = __capture.pop(); __sections[__name] = (__append ? (__sections?.[__name] ?? '') : '') + __eta.res; __eta.res = __prev } %>
+
+<% layout('/layouts/master', { ...it, __sections }) %>

@@ -21,15 +21,12 @@ That's it. The first boot takes a minute or two while the image builds and the s
 !!! tip "What happens on first boot"
     The entrypoint script (`docker/entrypoint.sh`) runs automatically and handles everything:
 
-    1. Installs PHP dependencies via Composer
-    2. Generates an `APP_KEY` if no `.env` file exists
-    3. Runs database migrations
-    4. Creates the initial admin user
-    5. Warns if frontend assets are missing (assets are built into the Docker image at build time)
-    6. Sets file permissions
-    7. Starts PHP-FPM (port 9000) and the image's built-in nginx (port 80)
+    1. Generates an `APP_KEY` on first start (unless you set `APP_KEY` yourself) and saves it in the `storage` volume at `storage/app_key`, so every service shares it
+    2. Runs database migrations
+    3. Creates the initial admin user if there is no user yet
+    4. Starts the Solder web server on port 3000 inside the container, behind the nginx container
 
-    Subsequent boots skip the steps that have already been completed, so restarts are fast.
+    Dependencies and frontend assets are built into the Docker image at build time. Subsequent boots skip the steps that have already been completed, so restarts are fast.
 
 ## Initial Admin User
 
@@ -101,10 +98,10 @@ The Docker stack consists of six containers:
 
 | Container | Image | Role |
 |-----------|-------|------|
-| **nginx** | `nginx` | Reverse proxy, serves static files, forwards PHP requests to the app |
-| **solder** | Built from `docker/Dockerfile` | PHP-FPM application server |
-| **worker** | Same image as solder | Queue worker for modpack imports, exports and update checks |
-| **scheduler** | Same image as solder | Runs scheduled tasks such as the nightly mod update check |
+| **nginx** | `nginx` | Reverse proxy on `SOLDER_PORT`, forwards requests to `solder:3000` (`docker/default.conf`) |
+| **solder** | Built from `docker/Dockerfile` | Node.js application server, listening on port 3000 |
+| **worker** | Same image as solder | Background worker for modpack imports, exports and update checks (`node dist/worker.js`) |
+| **scheduler** | Same image as solder | Runs scheduled tasks such as the nightly mod update check (`node dist/scheduler.js`) |
 | **mysql** | `mariadb` | MariaDB database with a health check |
 | **redis** | `valkey/valkey` | Valkey (Redis-compatible) for caching, sessions, and queues |
 
@@ -113,7 +110,12 @@ The solder container depends on mysql (waits for its health check to pass) and r
 ### Data Persistence
 
 - **Database files** are stored in `./docker/mysql/` on the host
-- **Application files** are bind-mounted from the project directory
+- **Storage** (logs, waiting imports, finished exports and the generated `APP_KEY`) is kept in the named `storage` volume, mounted at `/app/storage`
+
+The application itself lives in the image; the source directory is not mounted.
+
+!!! note "Mod repository"
+    If `SOLDER_REPO_LOCATION` is a filesystem path, mount that directory into the `solder` and `worker` containers at the same path. If you upload or import mods through Solder, it must be writable by uid 1000 (the image's `node` user).
 
 !!! warning
     Do not delete the `docker/mysql/` directory unless you want to lose your database. Back it up regularly.
@@ -150,23 +152,20 @@ docker compose up -d
 docker compose exec solder bash
 ```
 
-### Run Artisan Commands
+### Run Solder Commands
 
 ```bash
-docker compose exec solder php artisan <command>
+docker compose exec solder node dist/cli.js <command>
 ```
 
 For example:
 
 ```bash
-# Check migration status
-docker compose exec solder php artisan migrate:status
+# Run any pending database migrations
+docker compose exec solder node dist/cli.js migrate
 
-# Clear caches
-docker compose exec solder php artisan optimize:clear
-
-# Cache configuration for better performance
-docker compose exec solder php artisan optimize
+# Check every modpack's latest build for mod updates now
+docker compose exec solder node dist/cli.js check-updates
 ```
 
 ### Stop the Stack
@@ -201,13 +200,13 @@ The setup script will automatically run any new database migrations on boot.
 
 ## Development Setup
 
-For development, use `compose.dev.yml` which includes a named `vendor` volume (so vendor files live inside the container and don't conflict with your host) and uses PostgreSQL instead of MariaDB:
+For development, use `compose.dev.yml`, which mounts your checkout into the containers, rebuilds the frontend and restarts the server when files change, keeps `node_modules` in a named volume (so it doesn't conflict with your host) and uses PostgreSQL instead of MariaDB:
 
 ```bash
 docker compose -f compose.dev.yml up -d
 ```
 
-The development stack is accessible on port **8080** by default.
+The development stack is accessible on port **8080** by default. See [Contributing](../contributing.md) for details.
 
 ## HTTPS and Reverse Proxies
 
@@ -218,29 +217,16 @@ The default Docker setup serves Solder over HTTP on the configured `SOLDER_PORT`
 
 ## Running the Image on Its Own (Kubernetes)
 
-The Solder image includes nginx, so a single container serves the whole app on port **80**; you don't need a separate web server. PHP-FPM still listens on port 9000 if you'd rather put your own web server in front (as the Compose stack does).
+The Solder image runs as the non-root `node` user (uid 1000) and serves the whole app, including its static files, on port **3000**. It does not include a web server, so put your own reverse proxy or ingress in front of it (see `docker/default.conf` for the nginx settings the Compose stack uses, including the upload size and timeouts).
 
-To also serve the mod repository from the same container, mount an extra nginx server block into `/etc/nginx/conf.d/`. Requests for other hosts still go to Solder:
+Serve the mod repository from a separate web server or container.
 
-```nginx
-server {
-    listen 80;
-    server_name mods.example.com;
-    root /var/www/mods.example.com;
-    autoindex on;
+Run the worker and scheduler as extra containers from the same image, with the same environment, the mod repository volume, and a volume for `/app/storage` shared with the web container (uploaded imports and finished exports are passed between them there, and the generated `APP_KEY` is stored there unless you set `APP_KEY`). Pass their commands as arguments to the image's entrypoint (`args` in Kubernetes, not `command`) so they pick up the same `APP_KEY`:
 
-    location / {
-        try_files $uri $uri/ =404;
-    }
-}
-```
-
-Run the queue worker and scheduler as extra containers from the same image, with the same environment, the mod repository volume, and a volume for `storage/app/private` shared with the web container (uploaded imports and finished exports are passed between them there):
-
-| Container | Command | User |
+| Container | Arguments | User |
 |-----------|---------|------|
-| web | `/bin/bash /var/www/html/docker/entrypoint.sh` | root (it fixes permissions, then nginx and PHP-FPM drop to `www-data`) |
-| worker | `php /var/www/html/artisan queue:work --tries=1 --timeout=3600 --sleep=2` | `www-data` (33) |
-| scheduler | `php /var/www/html/artisan schedule:work` | `www-data` (33) |
+| web | (none) | `node` (1000) |
+| worker | `node dist/worker.js` | `node` (1000) |
+| scheduler | `node dist/scheduler.js` | `node` (1000) |
 
-`GET /up` returns 200 once the app is running, for readiness and liveness probes. Migrations run before nginx starts, so allow a few minutes on startup.
+`GET /up` returns 200 once the app is running, for readiness and liveness probes. Migrations run before the server starts, so allow a few minutes on startup.
