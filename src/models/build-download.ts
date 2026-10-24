@@ -47,8 +47,9 @@ async function rowsSince(buildIds: number[], days: number): Promise<DownloadRow[
     )
 }
 
+/** MySQL and PostgreSQL return DATE columns as UTC midnight, so read the day in UTC rather than APP_TIMEZONE */
 function dateKey(date: Date | string): string {
-    return date instanceof Date ? toDateString(date) : String(date).slice(0, 10)
+    return date instanceof Date ? date.toISOString().slice(0, 10) : String(date).slice(0, 10)
 }
 
 /** Total requests per build over the last $days days: build ID => count */

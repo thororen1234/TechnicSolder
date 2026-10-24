@@ -15,8 +15,11 @@ export interface JobDefinition<Payload> {
 }
 
 const QUEUE_NAME = 'default'
-/** Longer than the slowest job, so running imports aren't started twice */
-const LOCK_DURATION_MS = 3900 * 1000
+/**
+ * BullMQ renews a running job's lock every half of this, so it only decides how soon a job interrupted by a stopped
+ * worker is noticed (and failed), and how long the event loop may stall before a running job counts as interrupted.
+ */
+const LOCK_DURATION_MS = 5 * 60 * 1000
 
 const registry = new Map<string, JobDefinition<never>>()
 
@@ -91,12 +94,38 @@ export function startWorker(): Worker {
                 throw new Error(`Unknown job "${job.name}"`)
             }
             logger.info(`Processing ${job.name} (${job.id})`)
-            return runJob(definition, job.data as never)
+            try {
+                return await runJob(definition, job.data as never)
+            } catch (error) {
+                failureHandled.add(String(job.id))
+                throw error
+            }
         },
-        { connection: connection(), concurrency: 1, lockDuration: LOCK_DURATION_MS },
+        // An interrupted job fails rather than starting over on top of its half-finished work
+        { connection: connection(), concurrency: 1, lockDuration: LOCK_DURATION_MS, maxStalledCount: 0 },
     )
-    worker.on('failed', (job, error) => logger.error(`${job?.name} (${job?.id}) failed: ${error.message}`))
+    worker.on('failed', (job, error) => void jobFailed(job, error))
     return worker
+}
+
+/** Jobs whose failed() already ran in the worker, so the "failed" event doesn't run it again */
+const failureHandled = new Set<string>()
+
+/**
+ * Log a failed job, and run its failed() when handle() never got to throw: the worker running it stopped (a crash
+ * or a deploy) and BullMQ failed the interrupted job, which would otherwise leave its task "running" forever.
+ */
+export async function jobFailed(job: Pick<Job, 'id' | 'name' | 'data'> | undefined, error: Error): Promise<void> {
+    logger.error(`${job?.name} (${job?.id}) failed: ${error.message}`)
+    if (job === undefined || failureHandled.delete(String(job.id))) {
+        return
+    }
+    const definition = registry.get(job.name)
+    try {
+        await runWithContext({ userId: null }, async () => definition?.failed?.(job.data as never, error))
+    } catch (failure) {
+        logger.report(failure)
+    }
 }
 
 export async function closeQueue(): Promise<void> {

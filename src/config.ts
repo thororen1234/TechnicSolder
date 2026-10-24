@@ -83,6 +83,8 @@ function buildConfig() {
             key: env('APP_KEY'),
             timezone: env('APP_TIMEZONE', 'UTC'),
             port: int('PORT', 3000),
+            /** Proxies whose X-Forwarded-* headers are believed: Express "trust proxy" addresses, or * for any */
+            trustedProxies: env('TRUSTED_PROXIES', 'loopback, linklocal, uniquelocal'),
             bcryptRounds: int('BCRYPT_ROUNDS', 12),
         },
         database: {

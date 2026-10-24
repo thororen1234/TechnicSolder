@@ -1,5 +1,6 @@
 import { Redis } from 'ioredis'
 import { config } from '../config.js'
+import { logger } from './logger.js'
 
 /**
  * A small key/value cache with expiry, like Laravel's Cache facade. Values are stored as JSON, in Redis when
@@ -91,15 +92,31 @@ class RedisStore implements Store {
 
 let redisConnection: Redis | null = null
 
-/** The shared Redis connection (also used for sessions and the queue). */
+let redisDown = false
+
+/**
+ * The shared Redis connection for the cache, sessions and rate limits (the queue opens its own). While Redis is
+ * unreachable, commands fail after one retry instead of waiting, so requests error out rather than hang.
+ */
 export function redis(): Redis {
-    redisConnection ??= new Redis({
-        host: config.redis.host,
-        port: config.redis.port,
-        password: config.redis.password,
-        maxRetriesPerRequest: null,
-        lazyConnect: false,
-    })
+    if (redisConnection === null) {
+        redisConnection = new Redis({
+            host: config.redis.host,
+            port: config.redis.port,
+            password: config.redis.password,
+            maxRetriesPerRequest: 1,
+            lazyConnect: false,
+        })
+        redisConnection.on('error', (error: Error) => {
+            if (!redisDown) {
+                redisDown = true
+                logger.error(`Redis connection error: ${error.message}`)
+            }
+        })
+        redisConnection.on('ready', () => {
+            redisDown = false
+        })
+    }
     return redisConnection
 }
 

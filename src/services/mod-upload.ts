@@ -6,9 +6,12 @@ import type { Mod } from '../models/types.js'
 import { describe, detectVersion, environment as jarEnvironment } from '../mods/jar-metadata.js'
 import { Cache } from '../support/cache.js'
 import { fileSize, hashFile } from '../support/files.js'
-import { basename, filenameWithoutExtension, headline, slug } from '../support/str.js'
+import { basename, filenameWithoutExtension, headline, limit, slug } from '../support/str.js'
 import { ZipReader, ZipWriter } from '../support/zip.js'
 import { ModRepository } from './mod-repository.js'
+
+/** Length of the mods table's string columns */
+const MAX_COLUMN = 255
 
 export interface UploadResult {
     created: { mod_id: number; mod: string; version: string }[]
@@ -70,10 +73,11 @@ export class ModUploadService {
                 (await db.mod.create({
                     data: {
                         name: modSlug,
-                        pretty_name: (declared?.name ?? '') || headline(modSlug),
-                        author: declared?.authors ?? null,
+                        // The columns hold 255 characters, and MySQL rejects longer values
+                        pretty_name: limit((declared?.name ?? '') || headline(modSlug), MAX_COLUMN - 3),
+                        author: declared?.authors ? limit(declared.authors, MAX_COLUMN - 3) : null,
                         description: declared?.description ?? null,
-                        link: declared?.url ?? null,
+                        link: declared?.url && declared.url.length <= MAX_COLUMN ? declared.url : null,
                     },
                 }))
         }

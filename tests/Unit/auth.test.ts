@@ -3,7 +3,7 @@ import { verifyPassword } from '../../src/auth/passwords.js'
 import { codeAt, decryptSecret } from '../../src/auth/two-factor.js'
 import { db } from '../../src/database/prisma.js'
 import { Cache } from '../../src/support/cache.js'
-import { actingAs, admin, agent, flashed, flashedErrors, redirectPath, useSolder } from '../support/helpers.js'
+import { actingAs, admin, agent, client, flashed, flashedErrors, redirectPath, useSolder } from '../support/helpers.js'
 
 const currentCode = (secret: string) => codeAt(secret, Math.floor(Date.now() / 30_000))
 
@@ -142,6 +142,24 @@ describe('Signing in', () => {
                 await browser.post('/login', { email: homoglyph, password: 'wrong' })
             }
             expect((await browser.post('/login', { email: 'admin@example.com', password: 'wrong' })).status).toBe(429)
+        })
+
+        it('is not bypassed by a spoofed X-Forwarded-For', async () => {
+            const attempt = (spoofed: string) =>
+                client({ headers: { 'X-Forwarded-For': `${spoofed}, 203.0.113.7` } }).post('/login', { email: 'admin@example.com', password: 'wrong' })
+            for (let i = 0; i < 5; i++) {
+                await attempt(`198.51.100.${i}`)
+            }
+            expect((await attempt('198.51.100.99')).status).toBe(429)
+        })
+
+        it('keeps clients behind a trusted proxy apart', async () => {
+            const attempt = (clientIp: string) =>
+                client({ headers: { 'X-Forwarded-For': clientIp } }).post('/login', { email: 'admin@example.com', password: 'wrong' })
+            for (let i = 0; i < 5; i++) {
+                await attempt('203.0.113.7')
+            }
+            expect((await attempt('203.0.113.8')).status).not.toBe(429)
         })
 
         it('still lets the right password in after a few failures', async () => {

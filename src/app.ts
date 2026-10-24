@@ -35,7 +35,8 @@ export class AppModule {}
 export async function createApp(): Promise<INestApplication> {
     await connectDatabase()
     const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false, logger: ['error', 'warn'] })
-    app.set('trust proxy', true)
+    // Only private-network proxies by default, so clients can't pick their own IP for rate limits
+    app.set('trust proxy', config.app.trustedProxies === '*' ? true : config.app.trustedProxies)
     app.disable('x-powered-by')
 
     app.use(securityHeaders)

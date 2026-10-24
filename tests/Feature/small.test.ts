@@ -1,6 +1,6 @@
 import { checkUpdates, setup, type Output } from '../../src/commands.js'
 import { config } from '../../src/config.js'
-import { db } from '../../src/database/prisma.js'
+import { connectDatabase, db } from '../../src/database/prisma.js'
 import { buildDownloadsDaily, buildDownloadTotals } from '../../src/models/build-download.js'
 import { permissionFor } from '../../src/models/relations.js'
 import { toDateString } from '../../src/support/dates.js'
@@ -159,6 +159,24 @@ describe('Build downloads', () => {
         const daily = Object.values(await buildDownloadsDaily(buildId))
         expect(daily).toHaveLength(30)
         expect(daily.slice(-2)).toEqual([2, 1])
+    })
+
+    it('puts days returned as dates (MySQL, PostgreSQL) on the right day outside UTC', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] })
+        vi.setSystemTime(new Date('2026-10-21T12:00:00Z'))
+        config.app.timezone = 'EST'
+        // What the MariaDB adapter returns for a DATE column: midnight UTC
+        const query = vi.spyOn(await connectDatabase(), '$queryRawUnsafe').mockResolvedValue([
+            { build_id: buildId, date: new Date('2026-10-20T00:00:00Z'), count: 4 },
+            { build_id: buildId, date: new Date('2026-10-21T00:00:00Z'), count: 7 },
+        ])
+        try {
+            const daily = await buildDownloadsDaily(buildId)
+            expect(daily['2026-10-20']).toBe(4)
+            expect(daily['2026-10-21']).toBe(7)
+        } finally {
+            query.mockRestore()
+        }
     })
 
     it('does not count requests for unpublished builds', async () => {

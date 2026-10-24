@@ -106,6 +106,29 @@ describe('Uploading mods', () => {
     const errorList = (response: Parameters<typeof flashedErrors>[0]) => Object.values(flashedErrors(response)).flat()
     const versionsOf = async (modId: number) => (await db.modversion.findMany({ where: { mod_id: modId }, orderBy: { id: 'asc' } })).map((mv) => mv.version)
 
+    it('fits long jar metadata into the mods table', async () => {
+        const authors = Array.from({ length: 60 }, (_, i) => `Contributor${i}`)
+        const jar = makeArchive({
+            'fabric.mod.json': JSON.stringify({
+                id: 'crowded',
+                name: 'Crowded '.repeat(40).trim(),
+                version: '1.0.0',
+                authors,
+                contact: { homepage: `https://example.com/${'a'.repeat(300)}` },
+                depends: { minecraft: '1.20.1' },
+            }),
+        })
+
+        await upload('/mod/upload', [['crowded-1.0.0.jar', jar]])
+
+        const mod = await db.mod.findUniqueOrThrow({ where: { name: 'crowded' } })
+        expect(mod.author).toHaveLength(255)
+        expect(mod.author!.startsWith('Contributor0, Contributor1, ')).toBe(true)
+        expect(mod.author!.endsWith('...')).toBe(true)
+        expect(mod.pretty_name!.length).toBeLessThanOrEqual(255)
+        expect(mod.link).toBeNull()
+    })
+
     it('creates mods from the metadata of uploaded jars', async () => {
         const response = await upload('/mod/upload', [['iris-1.7.0.jar', iris()]])
         const mod = await db.mod.findUniqueOrThrow({ where: { name: 'iris' } })
